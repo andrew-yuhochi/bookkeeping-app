@@ -1,0 +1,120 @@
+# Canonical category list — Bookkeeping App
+# Source of truth for category names, tiers, tax contexts, and default splits.
+# No category name should be hardcoded in application code (Constraint 2A-6).
+
+expense_categories:
+  - name: Living Expense
+    slug: living-expense
+    household_tier: household
+    tax_context: taxable
+    default_split: "A/K"
+    sort_order: 1
+
+  - name: Food & Beverage
+    slug: food-beverage
+    household_tier: household
+    tax_context: taxable
+    default_split: "A/K"
+    sort_order: 2
+
+  - name: Utility
+    slug: utility
+    household_tier: household
+    tax_context: taxable
+    default_split: "A/K"
+    sort_order: 3
+
+  - name: Transportation
+    slug: transportation
+    household_tier: household
+    tax_context: taxable
+    default_split: "A/K"
+    sort_order: 4
+
+  - name: Dressing & Beauty
+    slug: dressing-beauty
+    household_tier: household
+    tax_context: taxable
+    default_split: prompt
+    sort_order: 5
+
+  - name: Sport
+    slug: sport
+    household_tier: household
+    tax_context: taxable
+    default_split: "A/K"
+    sort_order: 6
+
+  - name: Education
+    slug: education
+    household_tier: household
+    tax_context: taxable
+    default_split: prompt
+    sort_order: 7
+
+  - name: Insurance
+    slug: insurance
+    household_tier: household
+    tax_context: taxable
+    default_split: "A/K"
+    sort_order: 8
+
+  - name: Shared Enjoyment
+    slug: shared-enjoyment
+    household_tier: shared_discretionary
+    tax_context: taxable
+    default_split: "A/K"
+    sort_order: 9
+
+  - name: Personal Expense
+    slug: personal-expense
+    household_tier: personal_pocket
+    tax_context: taxable
+    default_split: prompt
+    sort_order: 10
+
+  - name: Other
+    slug: other
+    household_tier: household
+    tax_context: taxable
+    default_split: "A/K"
+    sort_order: 11
+
+income_categories:
+  - name: Salary
+    slug: salary
+    household_tier: household
+    tax_context: pre_tax
+    default_split: prompt
+    sort_order: 12
+
+  - name: Interest
+    slug: interest
+    household_tier: household
+    tax_context: taxable
+    default_split: prompt
+    sort_order: 13
+
+  - name: Cashback
+    slug: cashback
+    household_tier: household
+    tax_context: taxable
+    default_split: prompt
+    sort_order: 14
+
+  - name: Personal Income
+    slug: personal-income
+    household_tier: personal_pocket
+    tax_context: taxable
+    default_split: prompt
+    sort_order: 15
+
+# Household configuration — default household and users for PoC seed
+household:
+  name: "Yu-Ho Household"
+
+users:
+  - display_name: Andrew
+    person_code: A
+  - display_name: Kristy
+    person_code: K
