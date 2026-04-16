@@ -71,13 +71,13 @@ class TestMBNADetection:
 # Integration tests with real statements
 # ---------------------------------------------------------------------------
 
-FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "MBNA"
 
 
 def _skip_if_no_fixtures():
     """Skip integration tests if real statement fixtures are not available."""
     if not FIXTURES_DIR.exists():
-        pytest.skip("No fixtures directory")
+        pytest.skip("No MBNA fixtures directory")
     pdfs = list(FIXTURES_DIR.glob("MBNA*.pdf"))
     if not pdfs:
         pytest.skip("No MBNA fixtures available")
