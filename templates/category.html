@@ -249,7 +249,7 @@
         <div class="total-label">Kristy</div>
         <div class="total-amount" id="kristy-total">${{ "%.2f"|format(kristy_total) }}</div>
     </div>
-    <div class="total-combined">Total this month: ${{ "%.2f"|format(combined_total) }}</div>
+    <div class="total-combined" id="combined-total">Total this month: ${{ "%.2f"|format(combined_total) }}</div>
 </div>
 
 {# --- Transaction table or empty state --- #}
@@ -267,20 +267,8 @@
         </thead>
         <tbody>
             {% for txn in transactions %}
-            <tr data-txn-id="{{ txn.id }}">
-                <td>{{ txn.cash_date.strftime("%m-%d") }}</td>
-                <td>{{ txn.description }}</td>
-                <td class="txn-amount">${{ "%.2f"|format(txn.cad_amount if txn.cad_amount is not none else txn.original_amount) }}</td>
-                <td class="txn-split">
-                    <span class="split-badge">{{ txn.split_method }}</span>
-                </td>
-                <td>
-                    {{ category.name }}
-                    {%- if txn.classifier_confidence is not none and txn.classifier_confidence >= 0.70 and txn.classifier_confidence < 0.85 -%}
-                    <span class="confidence-dot" title="Moderate confidence ({{ '%.0f'|format(txn.classifier_confidence * 100) }}%)"></span>
-                    {%- endif -%}
-                </td>
-            </tr>
+            {% set eff_split = pending_edits[txn.id]["split_method"] if txn.id in pending_edits else txn.split_method %}
+            {% include "partials/txn_row.html" %}
             {% endfor %}
         </tbody>
     </table>

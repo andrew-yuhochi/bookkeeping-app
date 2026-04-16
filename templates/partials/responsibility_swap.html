@@ -1,0 +1,8 @@
+{# HTMX response for POST /transactions/{id}/responsibility.
+   Returns the updated <tr> as the main swap target, plus OOB swaps
+   for the Andrew/Kristy totals and combined total.
+   Expects: txn, category, eff_split, andrew_total, kristy_total, combined_total #}
+{% include "partials/txn_row.html" %}
+<div id="andrew-total" hx-swap-oob="true">${{ "%.2f"|format(andrew_total) }}</div>
+<div id="kristy-total" hx-swap-oob="true">${{ "%.2f"|format(kristy_total) }}</div>
+<div id="combined-total" hx-swap-oob="true">Total this month: ${{ "%.2f"|format(combined_total) }}</div>

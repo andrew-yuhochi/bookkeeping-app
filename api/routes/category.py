@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_categories, get_current_period, get_db, get_household_id
+from api.session_store import get_pending_edits
 from db.models import BudgetEnvelope, Category, Transaction, User
 
 logger = logging.getLogger(__name__)
@@ -55,14 +56,21 @@ def _get_category_page_data(
         ).scalars().all()
     )
 
-    # Compute per-person totals from andrew_amount / kristy_amount
+    # Read pending session edits (responsibility toggles not yet saved to DB)
+    pending_edits = get_pending_edits(request)
+
+    # Compute per-person totals, overlaying pending edits on DB values
     andrew_total = Decimal("0")
     kristy_total = Decimal("0")
     for txn in transactions:
-        if txn.andrew_amount is not None:
-            andrew_total += Decimal(str(txn.andrew_amount))
-        if txn.kristy_amount is not None:
-            kristy_total += Decimal(str(txn.kristy_amount))
+        if txn.id in pending_edits:
+            andrew_total += Decimal(pending_edits[txn.id]["andrew_amount"])
+            kristy_total += Decimal(pending_edits[txn.id]["kristy_amount"])
+        else:
+            if txn.andrew_amount is not None:
+                andrew_total += Decimal(str(txn.andrew_amount))
+            if txn.kristy_amount is not None:
+                kristy_total += Decimal(str(txn.kristy_amount))
     combined_total = andrew_total + kristy_total
 
     # Fetch users for this household
@@ -119,6 +127,7 @@ def _get_category_page_data(
         "active_page": f"{active_prefix}:{category_slug}",
         "category": category,
         "transactions": transactions,
+        "pending_edits": pending_edits,
         "andrew_total": andrew_total,
         "kristy_total": kristy_total,
         "combined_total": combined_total,
