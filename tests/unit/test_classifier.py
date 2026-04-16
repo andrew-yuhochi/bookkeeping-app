@@ -120,7 +120,7 @@ class TestOfflineClassifierClient:
         assert isinstance(result, ClassificationResult)
         assert result.confidence == 0.0
         assert result.needs_review is True
-        assert result.source == "stub"
+        assert result.source == "none"
 
     def test_classify_batch_matches_input_order(
         self, client: OfflineClassifierClient

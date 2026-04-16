@@ -199,9 +199,8 @@ class TestCacheWithClassifier:
             issuer="MBNA",
         )
         result = client.classify(txn)
-        assert result.confidence == 0.0
-        assert result.source == "stub"
-        assert result.needs_review is True
+        # Not a cache hit — falls through to model or fallback
+        assert result.source != "cache"
 
     def test_no_session_disables_cache(self) -> None:
         from classifier.base import Transaction
@@ -217,5 +216,5 @@ class TestCacheWithClassifier:
             issuer="MBNA",
         )
         result = client.classify(txn)
-        assert result.source == "stub"
+        assert result.source == "none"
         assert result.needs_review is True
