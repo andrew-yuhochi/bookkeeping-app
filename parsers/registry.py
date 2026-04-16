@@ -2,6 +2,7 @@ import logging
 
 from parsers.base import IssuerParser, UnknownIssuerError
 from parsers.mbna import MBNAParser
+from parsers.rogers import RogersParser
 from parsers.wealthsimple import WealthsimpleParser
 
 logger = logging.getLogger(__name__)
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 REGISTERED_PARSERS: list[IssuerParser] = [
     MBNAParser(),
     WealthsimpleParser(),
+    RogersParser(),
 ]
 
 
