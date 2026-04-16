@@ -56,14 +56,40 @@ def _get_category_page_data(
         ).scalars().all()
     )
 
-    # Read pending session edits (responsibility toggles not yet saved to DB)
+    # Read pending session edits (responsibility toggles + category moves)
     pending_edits = get_pending_edits(request)
+
+    # Filter out transactions moved AWAY from this category in session state
+    transactions = [
+        t for t in transactions
+        if t.id not in pending_edits
+        or "category_id" not in pending_edits[t.id]
+        or pending_edits[t.id]["category_id"] == category.id
+    ]
+
+    # Include transactions moved INTO this category from other categories
+    for txn_id, edits in pending_edits.items():
+        if edits.get("category_id") == category.id:
+            if not any(t.id == txn_id for t in transactions):
+                moved = db.execute(
+                    select(Transaction).where(
+                        Transaction.id == txn_id,
+                        Transaction.household_id == household_id,
+                        Transaction.accounting_period_year == period_year,
+                        Transaction.accounting_period_month == period_month,
+                    )
+                ).scalar_one_or_none()
+                if moved:
+                    transactions.append(moved)
+
+    # Re-sort after adding moved-in transactions
+    transactions.sort(key=lambda t: (t.cash_date, t.created_at), reverse=True)
 
     # Compute per-person totals, overlaying pending edits on DB values
     andrew_total = Decimal("0")
     kristy_total = Decimal("0")
     for txn in transactions:
-        if txn.id in pending_edits:
+        if txn.id in pending_edits and "andrew_amount" in pending_edits[txn.id]:
             andrew_total += Decimal(pending_edits[txn.id]["andrew_amount"])
             kristy_total += Decimal(pending_edits[txn.id]["kristy_amount"])
         else:

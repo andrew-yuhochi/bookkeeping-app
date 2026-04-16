@@ -190,6 +190,37 @@
     .empty-state a:hover {
         text-decoration: underline;
     }
+
+    /* --- Drag states --- */
+    .txn-table tbody tr.dragging {
+        opacity: 0.4;
+    }
+
+    .sidebar a.drag-over {
+        background: var(--accent) !important;
+        color: #fff !important;
+    }
+
+    .sidebar a.drop-eligible {
+        outline: 2px dashed var(--accent);
+        outline-offset: -2px;
+    }
+
+    /* --- Toast enhancements --- */
+    .toast-undo {
+        background: none;
+        border: 1px solid rgba(255,255,255,0.5);
+        color: #fff;
+        padding: 2px 8px;
+        border-radius: 3px;
+        margin-left: 8px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+
+    .toast-undo:hover {
+        background: rgba(255,255,255,0.15);
+    }
 </style>
 {% endblock %}
 
@@ -283,4 +314,134 @@
     {% endif %}
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+    const CURRENT_SLUG = "{{ category.slug }}";
+    const sidebarLinks = document.querySelectorAll('.sidebar a[data-category-slug]');
+
+    /* --- Drag start / end on table rows --- */
+    function initDragOnRows() {
+        document.querySelectorAll('#txn-table tbody tr[draggable]').forEach(function(row) {
+            row.addEventListener('dragstart', function(e) {
+                e.dataTransfer.setData('text/plain', row.dataset.txnId);
+                e.dataTransfer.effectAllowed = 'move';
+                row.classList.add('dragging');
+                sidebarLinks.forEach(function(a) {
+                    if (a.dataset.categorySlug !== CURRENT_SLUG) {
+                        a.classList.add('drop-eligible');
+                    }
+                });
+            });
+            row.addEventListener('dragend', function() {
+                row.classList.remove('dragging');
+                sidebarLinks.forEach(function(a) {
+                    a.classList.remove('drop-eligible', 'drag-over');
+                });
+            });
+        });
+    }
+    initDragOnRows();
+
+    /* --- Sidebar drop targets --- */
+    sidebarLinks.forEach(function(link) {
+        link.addEventListener('dragover', function(e) {
+            if (link.dataset.categorySlug === CURRENT_SLUG) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            link.classList.add('drag-over');
+        });
+        link.addEventListener('dragleave', function() {
+            link.classList.remove('drag-over');
+        });
+        link.addEventListener('drop', function(e) {
+            e.preventDefault();
+            link.classList.remove('drag-over');
+            var txnId = e.dataTransfer.getData('text/plain');
+            var targetSlug = link.dataset.categorySlug;
+
+            if (!txnId || targetSlug === CURRENT_SLUG) return;
+
+            moveTransaction(txnId, targetSlug);
+        });
+    });
+
+    /* --- Move transaction via fetch --- */
+    function moveTransaction(txnId, targetSlug) {
+        var row = document.getElementById('txn-row-' + txnId);
+        if (!row) return;
+
+        fetch('/transactions/' + txnId + '/move', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({target_category_slug: targetSlug})
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.no_op) return;
+
+            /* Remove row from table */
+            row.remove();
+
+            /* Update totals */
+            document.getElementById('andrew-total').textContent = '$' + data.andrew_total;
+            document.getElementById('kristy-total').textContent = '$' + data.kristy_total;
+            document.getElementById('combined-total').textContent = 'Total this month: $' + data.combined_total;
+
+            /* Show empty state if no rows left */
+            var tbody = document.querySelector('#txn-table tbody');
+            if (tbody && tbody.children.length === 0) {
+                document.querySelector('.txn-table-wrapper').innerHTML =
+                    '<div class="empty-state"><p>No {{ category.name }} transactions remaining.</p></div>';
+            }
+
+            /* Toast with undo */
+            showMoveToast(data.merchant_name, data.target_category_name, txnId);
+        })
+        .catch(function() {
+            showErrorToast("Couldn't move transaction. Please try again.");
+        });
+    }
+
+    /* --- Toast helpers --- */
+    function showMoveToast(merchant, targetName, txnId) {
+        var container = document.getElementById('toast-container');
+        var toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerHTML = "Moved '" + merchant + "' to " + targetName + ". " +
+            '<button class="toast-undo" data-txn-id="' + txnId + '">Undo</button>';
+
+        toast.querySelector('.toast-undo').addEventListener('click', function() {
+            undoMove(txnId, toast);
+        });
+
+        container.appendChild(toast);
+        setTimeout(function() { if (toast.parentNode) toast.remove(); }, 8000);
+    }
+
+    function showErrorToast(msg) {
+        var container = document.getElementById('toast-container');
+        var toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.style.background = 'var(--red)';
+        toast.textContent = msg;
+        container.appendChild(toast);
+        setTimeout(function() { if (toast.parentNode) toast.remove(); }, 5000);
+    }
+
+    /* --- Undo move --- */
+    function undoMove(txnId, toastEl) {
+        fetch('/transactions/' + txnId + '/undo-move', {method: 'POST'})
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.success) {
+                window.location.reload();
+            }
+        });
+        if (toastEl && toastEl.parentNode) toastEl.remove();
+    }
+})();
+</script>
 {% endblock %}

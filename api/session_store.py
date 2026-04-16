@@ -53,6 +53,19 @@ def set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+def remove_category_move(token: str, txn_id: str) -> None:
+    """Remove a category move from a pending edit, keeping split changes if any."""
+    session = _review_sessions.get(token, {})
+    if txn_id not in session:
+        return
+    edit = session[txn_id]
+    edit.pop("category_id", None)
+    edit.pop("original_category_id", None)
+    # If no split change remains either, remove the edit entirely
+    if "split_method" not in edit:
+        session.pop(txn_id, None)
+
+
 def get_pending_count(token: str) -> int:
     """Return the number of pending edits in this session."""
     return len(_review_sessions.get(token, {}))
