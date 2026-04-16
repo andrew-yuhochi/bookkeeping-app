@@ -1,0 +1,25 @@
+# Issuer detection rules — used by ParserRegistry
+# Each issuer has filename patterns (case-insensitive substring match)
+# and optional first-page text signatures for confirmation.
+
+issuers:
+  - name: MBNA
+    filename_patterns:
+      - mbna
+    text_signatures: []  # to be confirmed from real statement
+
+  - name: WEALTHSIMPLE
+    filename_patterns:
+      - wealthsimple
+      - ws_
+    text_signatures: []
+
+  - name: ROGERS
+    filename_patterns:
+      - rogers
+    text_signatures: []
+
+  - name: SIM_HK
+    filename_patterns:
+      - sim
+    text_signatures: []
