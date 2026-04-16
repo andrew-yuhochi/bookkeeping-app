@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Statements{% endblock %}
+
+{% block extra_head %}
+<style>
+    .drop-zone {
+        border: 2px dashed var(--border-color);
+        border-radius: 8px;
+        padding: 48px 24px;
+        text-align: center;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: border-color 0.2s, background-color 0.2s;
+        margin-bottom: 24px;
+    }
+
+    .drop-zone.dragover {
+        border-color: var(--accent);
+        background-color: #ebf5ff;
+    }
+
+    .drop-zone-text {
+        font-size: 15px;
+        margin-bottom: 12px;
+    }
+
+    .drop-zone-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .browse-btn {
+        display: inline-block;
+        padding: 8px 20px;
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 13px;
+        cursor: pointer;
+        margin-top: 12px;
+    }
+
+    .browse-btn:hover {
+        background: var(--accent-hover);
+    }
+
+    /* File list */
+    .file-list {
+        list-style: none;
+    }
+
+    .file-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        margin-bottom: 8px;
+        font-size: 13px;
+    }
+
+    .file-row.done { border-left: 3px solid var(--green); }
+    .file-row.error { border-left: 3px solid var(--red); }
+    .file-row.processing { border-left: 3px solid var(--accent); }
+
+    .file-name {
+        font-weight: 500;
+        flex: 1;
+    }
+
+    .file-issuer {
+        color: var(--text-muted);
+        margin: 0 12px;
+        font-size: 12px;
+    }
+
+    .file-status {
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .file-status .count { font-weight: 600; }
+    .file-status .flagged { color: var(--amber); }
+    .file-status .error-msg { color: var(--red); }
+    .file-status .dup { color: var(--text-muted); }
+
+    .file-remove {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 16px;
+        padding: 0 4px;
+        margin-left: 8px;
+    }
+
+    .file-remove:hover { color: var(--red); }
+
+    /* Summary */
+    .upload-summary {
+        margin-top: 20px;
+        padding: 16px;
+        background: #f0fff4;
+        border: 1px solid #c6f6d5;
+        border-radius: 6px;
+        display: none;
+    }
+
+    .upload-summary.visible { display: block; }
+
+    .upload-summary .summary-text {
+        font-size: 14px;
+        margin-bottom: 12px;
+    }
+
+    .continue-btn {
+        display: inline-block;
+        padding: 10px 24px;
+        background: var(--accent);
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .continue-btn:hover { background: var(--accent-hover); }
+
+    /* Spinner */
+    .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--border-color);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        margin-right: 6px;
+        vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Upload Statements</h1>
+
+<div class="drop-zone" id="drop-zone">
+    <div class="drop-zone-text">Drag and drop PDF statements here</div>
+    <div class="drop-zone-hint">MBNA, Wealthsimple, Rogers Bank</div>
+    <button class="browse-btn" onclick="document.getElementById('file-input').click()">Browse files</button>
+    <input type="file" id="file-input" multiple accept=".pdf" style="display: none">
+</div>
+
+<ul class="file-list" id="file-list"></ul>
+
+<div class="upload-summary" id="upload-summary">
+    <div class="summary-text" id="summary-text"></div>
+    <a href="/review" class="continue-btn">Continue to review &rarr;</a>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const fileList = document.getElementById('file-list');
+    const summary = document.getElementById('upload-summary');
+    const summaryText = document.getElementById('summary-text');
+
+    // --- Drag and drop ---
+    // Use the entire body as the drop target
+    document.body.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+
+    document.body.addEventListener('dragleave', function(e) {
+        if (!e.relatedTarget || !document.body.contains(e.relatedTarget)) {
+            dropZone.classList.remove('dragover');
+        }
+    });
+
+    document.body.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.pdf'));
+        if (files.length > 0) uploadFiles(files);
+    });
+
+    // Browse button
+    fileInput.addEventListener('change', function() {
+        const files = Array.from(fileInput.files);
+        if (files.length > 0) uploadFiles(files);
+        fileInput.value = '';
+    });
+
+    // --- Upload logic ---
+    function uploadFiles(files) {
+        summary.classList.remove('visible');
+
+        // Add file rows immediately
+        files.forEach(f => addFileRow(f.name, 'queued'));
+
+        // POST files
+        const formData = new FormData();
+        files.forEach(f => formData.append('files', f));
+
+        fetch('/upload', {
+            method: 'POST',
+            body: formData,
+        })
+        .then(r => r.json())
+        .then(data => {
+            // Start SSE listener
+            listenSSE(data.session_id);
+        })
+        .catch(err => {
+            files.forEach(f => updateFileRow(f.name, 'error', {message: err.toString()}));
+        });
+    }
+
+    function addFileRow(filename, status) {
+        // Don't add duplicate rows
+        if (document.querySelector(`[data-filename="${CSS.escape(filename)}"]`)) return;
+
+        const li = document.createElement('li');
+        li.className = 'file-row';
+        li.setAttribute('data-filename', filename);
+        li.innerHTML = `
+            <span class="file-name">${escapeHtml(filename)}</span>
+            <span class="file-issuer"></span>
+            <span class="file-status"><span class="spinner"></span> Queued</span>
+            <button class="file-remove" onclick="this.parentElement.remove()" title="Remove">&times;</button>
+        `;
+        fileList.appendChild(li);
+    }
+
+    function updateFileRow(filename, status, data) {
+        const row = document.querySelector(`[data-filename="${CSS.escape(filename)}"]`);
+        if (!row) return;
+
+        const issuerEl = row.querySelector('.file-issuer');
+        const statusEl = row.querySelector('.file-status');
+        const removeBtn = row.querySelector('.file-remove');
+
+        if (data && data.issuer) {
+            issuerEl.textContent = data.issuer;
+        }
+
+        row.className = 'file-row';
+
+        switch (status) {
+            case 'queued':
+                statusEl.innerHTML = '<span class="spinner"></span> Queued';
+                break;
+            case 'parsing':
+                row.classList.add('processing');
+                statusEl.innerHTML = '<span class="spinner"></span> Parsing...';
+                break;
+            case 'classifying':
+                row.classList.add('processing');
+                statusEl.innerHTML = '<span class="spinner"></span> Classifying...';
+                break;
+            case 'done':
+                row.classList.add('done');
+                let parts = [];
+                parts.push(`<span class="count">${data.parsed || 0} transactions</span>`);
+                if (data.flagged > 0) parts.push(`<span class="flagged">${data.flagged} flagged</span>`);
+                if (data.duplicates > 0) parts.push(`<span class="dup">${data.duplicates} duplicates skipped</span>`);
+                statusEl.innerHTML = parts.join(', ');
+                removeBtn.style.display = 'none';
+                break;
+            case 'error':
+                row.classList.add('error');
+                statusEl.innerHTML = `<span class="error-msg">${escapeHtml(data.message || 'Unknown error')}</span>`;
+                break;
+        }
+    }
+
+    // --- SSE listener ---
+    function listenSSE(sessionId) {
+        const evtSource = new EventSource(`/upload/status/${sessionId}`);
+
+        evtSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'file_status') {
+                updateFileRow(data.filename, data.status, data);
+            } else if (data.type === 'complete') {
+                evtSource.close();
+                showSummary(data);
+            } else if (data.error) {
+                evtSource.close();
+            }
+        };
+
+        evtSource.onerror = function() {
+            evtSource.close();
+        };
+    }
+
+    function showSummary(data) {
+        let parts = [];
+        if (data.total_parsed > 0) parts.push(`${data.total_parsed} transactions parsed`);
+        if (data.total_flagged > 0) parts.push(`${data.total_flagged} need review`);
+        if (data.total_duplicates > 0) parts.push(`${data.total_duplicates} duplicates skipped`);
+        if (data.total_errors > 0) parts.push(`${data.total_errors} file(s) failed`);
+
+        summaryText.textContent = parts.join('. ') + '.';
+        summary.classList.add('visible');
+
+        // Update sidebar review badge
+        const badge = document.getElementById('review-badge');
+        if (badge && data.total_flagged > 0) {
+            badge.textContent = data.total_flagged;
+            badge.style.display = '';
+        }
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+})();
+</script>
+{% endblock %}

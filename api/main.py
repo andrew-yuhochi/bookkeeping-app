@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 
 from api.routes.health import router as health_router
 from api.routes.overview import router as overview_router
+from api.routes.upload import router as upload_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -34,6 +35,7 @@ if _STATIC_DIR.exists():
 # Routes
 app.include_router(health_router)
 app.include_router(overview_router)
+app.include_router(upload_router)
 
 
 @app.get("/")
