@@ -1,11 +1,14 @@
 import logging
 
 from parsers.base import IssuerParser, UnknownIssuerError
+from parsers.mbna import MBNAParser
 
 logger = logging.getLogger(__name__)
 
 # Append new parser instances here. Order matters for detection priority.
-REGISTERED_PARSERS: list[IssuerParser] = []
+REGISTERED_PARSERS: list[IssuerParser] = [
+    MBNAParser(),
+]
 
 
 class ParserRegistry:
