@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Overview — {{ "%04d-%02d"|format(period_year, period_month) }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Overview — {{ "%04d-%02d"|format(period_year, period_month) }}</h1>
+
+<p style="color: var(--text-secondary);">
+    Overview page content will be implemented in TASK-023.
+</p>
+{% endblock %}
