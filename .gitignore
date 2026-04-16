@@ -12,4 +12,5 @@ dist/
 build/
 data/*.xlsx
 data/*.csv
+tests/fixtures/**/*.pdf
 tests/fixtures/*.pdf
