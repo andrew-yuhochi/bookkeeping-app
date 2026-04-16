@@ -1,0 +1,15 @@
+fastapi==0.115.12
+uvicorn==0.34.2
+pdfplumber==0.11.6
+scikit-learn==1.8.0
+pydantic==2.11.3
+pydantic-settings==2.9.1
+sqlalchemy==2.0.41
+alembic==1.15.2
+openpyxl==3.1.5
+httpx==0.28.1
+jinja2==3.1.6
+python-multipart==0.0.20
+ruff==0.11.8
+pytest==8.3.5
+pytest-cov==6.1.1

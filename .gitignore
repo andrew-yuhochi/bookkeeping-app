@@ -1,0 +1,14 @@
+.env
+*.db
+__pycache__/
+venv/
+*.pkl
+*.pyc
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+*.egg-info/
+dist/
+build/
+data/*.xlsx
+data/*.csv
