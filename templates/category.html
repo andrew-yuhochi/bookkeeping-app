@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.name }} — {{ "%04d-%02d"|format(period_year, period_month) }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* --- Envelope bars --- */
+    .envelope-section {
+        margin-bottom: 24px;
+    }
+
+    .envelope-row {
+        margin-bottom: 12px;
+    }
+
+    .envelope-label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .envelope-bar-track {
+        background: #edf2f7;
+        border-radius: 4px;
+        height: 22px;
+        position: relative;
+        overflow: visible;
+    }
+
+    .envelope-bar-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.3s ease;
+        min-width: 2px;
+    }
+
+    .envelope-bar-fill.green { background: var(--green); }
+    .envelope-bar-fill.amber { background: var(--amber); }
+    .envelope-bar-fill.red { background: var(--red); }
+
+    .envelope-stats {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 3px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .envelope-indicator {
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .envelope-indicator.green { color: var(--green); }
+    .envelope-indicator.amber { color: var(--amber); }
+    .envelope-indicator.red { color: var(--red); }
+
+    /* --- Per-person totals --- */
+    .totals-section {
+        display: flex;
+        gap: 32px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+
+    .total-card {
+        background: var(--bg-sidebar);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 12px 20px;
+        min-width: 160px;
+    }
+
+    .total-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 4px;
+    }
+
+    .total-amount {
+        font-size: 26px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .total-combined {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-top: 8px;
+    }
+
+    /* --- Transaction table --- */
+    .txn-table-wrapper {
+        overflow-x: auto;
+    }
+
+    .txn-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .txn-table th {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 2px solid var(--border-color);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        cursor: default;
+    }
+
+    .txn-table td {
+        padding: 7px 10px;
+        border-bottom: 1px solid #f0f0f0;
+        vertical-align: middle;
+    }
+
+    .txn-table tbody tr {
+        transition: background-color 0.1s;
+        cursor: pointer;
+    }
+
+    .txn-table tbody tr:hover {
+        background: #f7fafc;
+    }
+
+    .txn-amount {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    .txn-split {
+        text-align: center;
+    }
+
+    .split-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+        font-weight: 600;
+        background: #edf2f7;
+        color: var(--text-secondary);
+        min-width: 32px;
+        text-align: center;
+    }
+
+    .confidence-dot {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-muted);
+        margin-left: 6px;
+        vertical-align: middle;
+        title: "Moderate confidence (0.70-0.85)";
+    }
+
+    /* --- Empty state --- */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-secondary);
+    }
+
+    .empty-state p {
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .empty-state a {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 13px;
+    }
+
+    .empty-state a:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ category.name }} — {{ "%04d-%02d"|format(period_year, period_month) }}</h1>
+
+{# --- Envelope bars (expense categories only if envelopes exist) --- #}
+{% if category.category_type == 'expense' and (andrew_envelope > 0 or kristy_envelope > 0) %}
+<div class="envelope-section">
+    {% if andrew_envelope > 0 %}
+    {% set a_class = 'red' if andrew_pct >= 100 else ('amber' if andrew_pct >= 90 else 'green') %}
+    {% set a_icon = 'Over budget' if andrew_pct >= 100 else ('Near limit' if andrew_pct >= 90 else 'On track') %}
+    <div class="envelope-row">
+        <div class="envelope-label">Andrew</div>
+        <div class="envelope-bar-track">
+            <div class="envelope-bar-fill {{ a_class }}" style="width: {{ [andrew_pct, 100] | min }}%"></div>
+        </div>
+        <div class="envelope-stats">
+            <span class="envelope-indicator {{ a_class }}">
+                {% if andrew_pct >= 100 %}&#10007;{% elif andrew_pct >= 90 %}&#9888;{% else %}&#10003;{% endif %}
+                {{ a_icon }}
+            </span>
+            &mdash;
+            ${{ "%.2f"|format(andrew_total) }} / ${{ "%.2f"|format(andrew_envelope) }} envelope ({{ andrew_pct }}%)
+        </div>
+    </div>
+    {% endif %}
+
+    {% if kristy_envelope > 0 %}
+    {% set k_class = 'red' if kristy_pct >= 100 else ('amber' if kristy_pct >= 90 else 'green') %}
+    {% set k_icon = 'Over budget' if kristy_pct >= 100 else ('Near limit' if kristy_pct >= 90 else 'On track') %}
+    <div class="envelope-row">
+        <div class="envelope-label">Kristy</div>
+        <div class="envelope-bar-track">
+            <div class="envelope-bar-fill {{ k_class }}" style="width: {{ [kristy_pct, 100] | min }}%"></div>
+        </div>
+        <div class="envelope-stats">
+            <span class="envelope-indicator {{ k_class }}">
+                {% if kristy_pct >= 100 %}&#10007;{% elif kristy_pct >= 90 %}&#9888;{% else %}&#10003;{% endif %}
+                {{ k_icon }}
+            </span>
+            &mdash;
+            ${{ "%.2f"|format(kristy_total) }} / ${{ "%.2f"|format(kristy_envelope) }} envelope ({{ kristy_pct }}%)
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{# --- Per-person totals --- #}
+<div class="totals-section" id="person-totals">
+    <div class="total-card">
+        <div class="total-label">Andrew</div>
+        <div class="total-amount" id="andrew-total">${{ "%.2f"|format(andrew_total) }}</div>
+    </div>
+    <div class="total-card">
+        <div class="total-label">Kristy</div>
+        <div class="total-amount" id="kristy-total">${{ "%.2f"|format(kristy_total) }}</div>
+    </div>
+    <div class="total-combined">Total this month: ${{ "%.2f"|format(combined_total) }}</div>
+</div>
+
+{# --- Transaction table or empty state --- #}
+{% if transactions %}
+<div class="txn-table-wrapper">
+    <table class="txn-table" id="txn-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Merchant</th>
+                <th class="txn-amount">Amount</th>
+                <th class="txn-split">Split</th>
+                <th>Category</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for txn in transactions %}
+            <tr data-txn-id="{{ txn.id }}">
+                <td>{{ txn.cash_date.strftime("%m-%d") }}</td>
+                <td>{{ txn.description }}</td>
+                <td class="txn-amount">${{ "%.2f"|format(txn.cad_amount if txn.cad_amount is not none else txn.original_amount) }}</td>
+                <td class="txn-split">
+                    <span class="split-badge">{{ txn.split_method }}</span>
+                </td>
+                <td>
+                    {{ category.name }}
+                    {%- if txn.classifier_confidence is not none and txn.classifier_confidence >= 0.70 and txn.classifier_confidence < 0.85 -%}
+                    <span class="confidence-dot" title="Moderate confidence ({{ '%.0f'|format(txn.classifier_confidence * 100) }}%)"></span>
+                    {%- endif -%}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No {{ category.name }} transactions in {{ "%04d-%02d"|format(period_year, period_month) }}.</p>
+    {% if period_month > 1 %}
+    <a href="?year={{ period_year }}&month={{ period_month - 1 }}">See last month</a>
+    {% else %}
+    <a href="?year={{ period_year - 1 }}&month=12">See last month</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from api.routes.category import router as category_router
 from api.routes.health import router as health_router
 from api.routes.overview import router as overview_router
 from api.routes.upload import router as upload_router
@@ -36,6 +37,7 @@ if _STATIC_DIR.exists():
 app.include_router(health_router)
 app.include_router(overview_router)
 app.include_router(upload_router)
+app.include_router(category_router)
 
 
 @app.get("/")
