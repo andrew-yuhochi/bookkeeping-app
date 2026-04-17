@@ -1,15 +1,22 @@
-"""Transaction edit routes — inline responsibility toggle, move, update."""
+"""Transaction edit routes — inline responsibility toggle, move, drawer, update."""
 
 import logging
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_db, get_household_id
+from api.dependencies import (
+    get_categories,
+    get_classifier,
+    get_current_period,
+    get_db,
+    get_household_id,
+)
+from api.helpers import compute_split_amounts, get_top_guesses
 from api.session_store import (
     SPLIT_CYCLE,
     _review_sessions,
@@ -24,21 +31,6 @@ from db.models import Category, Transaction
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-TWO_PLACES = Decimal("0.01")
-
-
-def _compute_split_amounts(
-    cad_amount: Decimal, split_method: str,
-) -> tuple[Decimal, Decimal]:
-    """Return (andrew_amount, kristy_amount) for a given split method."""
-    if split_method == "A":
-        return cad_amount, Decimal("0")
-    elif split_method == "K":
-        return Decimal("0"), cad_amount
-    else:  # A/K — 50/50
-        half = (cad_amount / 2).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
-        return half, cad_amount - half
 
 
 def _calc_category_totals(
@@ -138,7 +130,7 @@ async def toggle_responsibility(
 
     # Compute new amounts
     cad_amount = Decimal(str(txn.cad_amount)) if txn.cad_amount is not None else Decimal(str(txn.original_amount))
-    new_andrew, new_kristy = _compute_split_amounts(cad_amount, new_split)
+    new_andrew, new_kristy = compute_split_amounts(cad_amount, new_split)
 
     # Store in session (preserve any existing category move)
     edit: dict = {
@@ -254,7 +246,7 @@ async def move_transaction(
     else:
         # Compute current split amounts for the totals calculation
         cad = Decimal(str(txn.cad_amount)) if txn.cad_amount is not None else Decimal(str(txn.original_amount))
-        a_amt, k_amt = _compute_split_amounts(cad, txn.split_method)
+        a_amt, k_amt = compute_split_amounts(cad, txn.split_method)
         edit["andrew_amount"] = str(a_amt)
         edit["kristy_amount"] = str(k_amt)
 
@@ -298,6 +290,160 @@ async def undo_move_transaction(
         return resp
 
     remove_category_move(token, txn_id)
+
+    resp = JSONResponse(content={"success": True})
+    set_session_cookie(resp, token)
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Transaction detail drawer
+# ---------------------------------------------------------------------------
+
+
+@router.get("/transactions/{txn_id}/drawer", response_class=HTMLResponse)
+async def transaction_drawer(
+    request: Request,
+    txn_id: str,
+    db: Session = Depends(get_db),
+    household_id: str = Depends(get_household_id),
+) -> HTMLResponse:
+    """Render the detail drawer partial for a transaction."""
+    txn = db.execute(
+        select(Transaction).where(
+            Transaction.id == txn_id,
+            Transaction.household_id == household_id,
+        )
+    ).scalar_one_or_none()
+
+    if txn is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    categories = get_categories(db)
+    category_map = {c.id: c for c in categories}
+    slug_map = {c.slug: c for c in categories}
+
+    classifier = get_classifier(db)
+    top_guesses = get_top_guesses(classifier, txn, category_map, slug_map)
+
+    # Pending session edits for this transaction
+    token = get_session_token(request)
+    pending = _review_sessions.get(token, {}).get(txn_id, {})
+
+    # Effective values (session overrides DB)
+    effective_category_id = pending.get("category_id", txn.category_id)
+    effective_split = pending.get("split_method", txn.split_method)
+
+    current_year, current_month = get_current_period()
+
+    # Review count for sidebar badge
+    period_year = txn.accounting_period_year
+    period_month = txn.accounting_period_month
+    review_count = db.execute(
+        select(func.count()).select_from(Transaction).where(
+            Transaction.household_id == household_id,
+            Transaction.needs_review == True,  # noqa: E712
+            Transaction.accounting_period_year == period_year,
+            Transaction.accounting_period_month == period_month,
+        )
+    ).scalar() or 0
+
+    templates = request.app.state.templates
+    content = templates.TemplateResponse(
+        "partials/drawer.html",
+        {
+            "request": request,
+            "txn": txn,
+            "category": category_map.get(txn.category_id),
+            "categories": categories,
+            "top_guesses": top_guesses,
+            "pending": pending,
+            "effective_category_id": effective_category_id,
+            "effective_split": effective_split,
+            "period_year": period_year,
+            "period_month": period_month,
+            "review_count": review_count,
+        },
+    ).body.decode()
+
+    response = HTMLResponse(content=content)
+    set_session_cookie(response, token)
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Transaction update (from drawer)
+# ---------------------------------------------------------------------------
+
+
+class DrawerUpdateRequest(BaseModel):
+    category_id: str
+    split_method: str
+    accounting_period: str  # "YYYY-MM" format
+    notes: str
+
+
+@router.post("/transactions/{txn_id}/update")
+async def update_transaction(
+    request: Request,
+    txn_id: str,
+    body: DrawerUpdateRequest,
+    db: Session = Depends(get_db),
+    household_id: str = Depends(get_household_id),
+) -> JSONResponse:
+    """Apply drawer changes to session state.
+
+    Stores category, responsibility, accounting period override, and notes
+    as pending edits. Changes are committed to DB in TASK-022 (Save Session).
+    """
+    txn = db.execute(
+        select(Transaction).where(
+            Transaction.id == txn_id,
+            Transaction.household_id == household_id,
+        )
+    ).scalar_one_or_none()
+
+    if txn is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    token = get_session_token(request)
+    existing = _review_sessions.get(token, {}).get(txn_id, {})
+
+    cad_amount = (
+        Decimal(str(txn.cad_amount))
+        if txn.cad_amount is not None
+        else Decimal(str(txn.original_amount))
+    )
+    andrew_amt, kristy_amt = compute_split_amounts(cad_amount, body.split_method)
+
+    # Parse accounting period
+    period_year = txn.accounting_period_year
+    period_month = txn.accounting_period_month
+    period_is_override = False
+    if body.accounting_period:
+        try:
+            parts = body.accounting_period.split("-")
+            new_year = int(parts[0])
+            new_month = int(parts[1])
+            if new_year != txn.accounting_period_year or new_month != txn.accounting_period_month:
+                period_year = new_year
+                period_month = new_month
+                period_is_override = True
+        except (ValueError, IndexError):
+            pass  # Keep original period if parsing fails
+
+    edit: dict = {
+        "category_id": body.category_id,
+        "original_category_id": existing.get("original_category_id", txn.category_id),
+        "split_method": body.split_method,
+        "andrew_amount": str(andrew_amt),
+        "kristy_amount": str(kristy_amt),
+        "notes": body.notes,
+        "accounting_period_year": period_year,
+        "accounting_period_month": period_month,
+        "accounting_period_is_override": period_is_override,
+    }
+    set_pending_edit(token, txn_id, edit)
 
     resp = JSONResponse(content={"success": True})
     set_session_cookie(resp, token)

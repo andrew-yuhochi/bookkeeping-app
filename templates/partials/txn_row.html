@@ -1,6 +1,7 @@
 {# Transaction row partial — used by category.html and responsibility_swap.html.
    Expects: txn, category, eff_split (effective split after pending edits) #}
-<tr id="txn-row-{{ txn.id }}" data-txn-id="{{ txn.id }}" draggable="true">
+<tr id="txn-row-{{ txn.id }}" data-txn-id="{{ txn.id }}" draggable="true"
+    onclick="if(!event.target.closest('.split-badge')&&!window._dragging){BookkeepingDrawer.open('{{ txn.id }}')}">
     <td>{{ txn.cash_date.strftime("%m-%d") }}</td>
     <td>{{ txn.description }}</td>
     <td class="txn-amount">${{ "%.2f"|format(txn.cad_amount if txn.cad_amount is not none else txn.original_amount) }}</td>

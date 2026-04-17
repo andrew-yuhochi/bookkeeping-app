@@ -155,6 +155,37 @@
             font-size: 13px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
+
+        /* --- Drawer overlay + panel --- */
+        .drawer-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.25);
+            z-index: 900;
+        }
+        .drawer-overlay.open { display: block; }
+
+        .drawer-panel {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 420px;
+            max-width: 90vw;
+            height: 100vh;
+            background: var(--bg-primary);
+            border-left: 1px solid var(--border-color);
+            box-shadow: -4px 0 20px rgba(0,0,0,0.08);
+            z-index: 910;
+            overflow-y: auto;
+            transform: translateX(100%);
+            transition: transform 0.2s ease;
+        }
+        .drawer-panel.open {
+            display: block;
+            transform: translateX(0);
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -217,6 +248,55 @@
     </main>
 
     <div class="toast-container" id="toast-container"></div>
+
+    <!-- Transaction detail drawer -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="drawer-panel" id="drawer-panel"></div>
+
+    <script>
+    /* --- Drawer open/close helpers (global) --- */
+    window.BookkeepingDrawer = (function() {
+        var overlay = document.getElementById('drawer-overlay');
+        var panel = document.getElementById('drawer-panel');
+
+        function open(txnId) {
+            fetch('/transactions/' + txnId + '/drawer')
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    panel.innerHTML = html;
+                    /* Use rAF to allow display:block to take effect before animating */
+                    panel.classList.add('open');
+                    requestAnimationFrame(function() {
+                        overlay.classList.add('open');
+                    });
+                });
+        }
+
+        function close() {
+            panel.classList.remove('open');
+            overlay.classList.remove('open');
+            /* Clear content after transition */
+            setTimeout(function() { panel.innerHTML = ''; }, 220);
+        }
+
+        function isOpen() {
+            return panel.classList.contains('open');
+        }
+
+        /* Close on overlay click */
+        overlay.addEventListener('click', close);
+
+        /* Close on Esc */
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && isOpen()) {
+                e.preventDefault();
+                close();
+            }
+        });
+
+        return { open: open, close: close, isOpen: isOpen };
+    })();
+    </script>
 
     {% block extra_scripts %}{% endblock %}
 </body>

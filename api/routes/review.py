@@ -1,7 +1,7 @@
 """Needs-Review Queue routes — review flagged transactions."""
 
 import logging
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -16,6 +16,7 @@ from api.dependencies import (
     get_db,
     get_household_id,
 )
+from api.helpers import compute_split_amounts, get_top_guesses
 from api.session_store import (
     _review_sessions,
     get_session_token,
@@ -23,70 +24,11 @@ from api.session_store import (
     set_review_correction,
     set_session_cookie,
 )
-from classifier.offline import OfflineClassifierClient
-from db.models import Category, Transaction
+from db.models import Transaction
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-TWO_PLACES = Decimal("0.01")
-
-
-def _compute_split_amounts(
-    cad_amount: Decimal, split_method: str,
-) -> tuple[Decimal, Decimal]:
-    """Return (andrew_amount, kristy_amount) for a given split method."""
-    if split_method == "A":
-        return cad_amount, Decimal("0")
-    elif split_method == "K":
-        return Decimal("0"), cad_amount
-    else:  # A/K — 50/50
-        half = (cad_amount / 2).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
-        return cad_amount - half, half
-
-
-def _get_top_guesses(
-    classifier: OfflineClassifierClient,
-    txn: Transaction,
-    category_map: dict[str, Category],
-    slug_map: dict[str, Category],
-) -> list[dict]:
-    """Get top-3 category guesses for a transaction from the classifier.
-
-    Falls back to just the stored classification if the model can't produce
-    top-N predictions (e.g. no model loaded, cache-classified).
-
-    The model may store category labels as UUIDs or slugs depending on how
-    training data was prepared — slug_map handles the latter case.
-    """
-    model = classifier._model
-    if model is not None:
-        from classifier.normalizer import normalize_merchant
-        normalized = normalize_merchant(txn.description)
-        if normalized:
-            top_n = model.predict_top_n(normalized, n=3)
-            guesses = []
-            for cat_id, conf in top_n:
-                cat = category_map.get(cat_id) or slug_map.get(cat_id)
-                if cat:
-                    guesses.append({
-                        "category_id": cat.id,
-                        "category_name": cat.name,
-                        "category_slug": cat.slug,
-                        "confidence": conf,
-                    })
-            if guesses:
-                return guesses
-
-    # Fallback: just show the stored classification as the single guess
-    cat = category_map.get(txn.category_id)
-    return [{
-        "category_id": txn.category_id,
-        "category_name": cat.name if cat else "Unknown",
-        "category_slug": cat.slug if cat else "unknown",
-        "confidence": txn.classifier_confidence or 0.0,
-    }]
 
 
 @router.get("/review", response_class=HTMLResponse)
@@ -132,7 +74,7 @@ async def review_queue(
     # Build review items with top-3 guesses
     review_items = []
     for txn in pending_txns:
-        top_guesses = _get_top_guesses(classifier, txn, category_map, slug_map)
+        top_guesses = get_top_guesses(classifier, txn, category_map, slug_map)
         cat = category_map.get(txn.category_id)
         review_items.append({
             "txn": txn,
@@ -197,7 +139,7 @@ async def accept_correction(
         if txn.cad_amount is not None
         else Decimal(str(txn.original_amount))
     )
-    andrew_amt, kristy_amt = _compute_split_amounts(cad_amount, body.split_method)
+    andrew_amt, kristy_amt = compute_split_amounts(cad_amount, body.split_method)
 
     token = get_session_token(request)
     set_review_correction(
@@ -286,7 +228,7 @@ async def accept_all_confident(
                 if txn.cad_amount is not None
                 else Decimal(str(txn.original_amount))
             )
-            andrew_amt, kristy_amt = _compute_split_amounts(
+            andrew_amt, kristy_amt = compute_split_amounts(
                 cad_amount, txn.split_method,
             )
             set_review_correction(

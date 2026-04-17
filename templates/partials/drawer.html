@@ -1,0 +1,414 @@
+{# Transaction detail drawer partial.
+   Returned by GET /transactions/{id}/drawer.
+   Expects: txn, category, categories, top_guesses, pending, period_year, period_month #}
+<style>
+    .drawer-content { padding: 20px 24px; }
+
+    .drawer-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+
+    .drawer-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        line-height: 1.3;
+        flex: 1;
+        margin-right: 12px;
+    }
+
+    .drawer-close {
+        background: none;
+        border: none;
+        font-size: 20px;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0 4px;
+        line-height: 1;
+    }
+    .drawer-close:hover { color: var(--text-primary); }
+
+    .drawer-section {
+        margin-bottom: 20px;
+    }
+
+    .drawer-section-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+    }
+
+    .drawer-amount-block {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .drawer-amount-primary {
+        font-size: 24px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .drawer-amount-original {
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .drawer-rate-source {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 4px;
+    }
+
+    .drawer-meta-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 12px;
+        font-size: 13px;
+    }
+
+    .drawer-meta-key {
+        color: var(--text-muted);
+        white-space: nowrap;
+    }
+
+    .drawer-meta-val {
+        color: var(--text-primary);
+    }
+
+    /* Category guesses in drawer */
+    .drawer-guess-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .drawer-guess-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: white;
+        color: var(--text-primary);
+        font-size: 13px;
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+    }
+    .drawer-guess-btn:hover { border-color: var(--accent); background: #ebf8ff; }
+    .drawer-guess-btn.selected {
+        border-color: var(--accent);
+        background: #ebf8ff;
+        font-weight: 500;
+    }
+    .drawer-guess-confidence {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Responsibility radio in drawer */
+    .drawer-resp-options {
+        display: flex;
+        gap: 6px;
+    }
+    .drawer-resp-btn {
+        padding: 5px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: white;
+        color: var(--text-secondary);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+    .drawer-resp-btn:hover { border-color: var(--accent); background: #ebf8ff; }
+    .drawer-resp-btn.selected {
+        border-color: var(--accent);
+        background: #ebf8ff;
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    /* Accounting period */
+    .drawer-period-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 13px;
+    }
+    .drawer-period-row input[type="month"] {
+        padding: 4px 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 13px;
+        color: var(--text-primary);
+    }
+    .drawer-period-cash {
+        color: var(--text-muted);
+        font-size: 12px;
+    }
+
+    /* Notes */
+    .drawer-notes textarea {
+        width: 100%;
+        min-height: 60px;
+        padding: 8px 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 13px;
+        font-family: inherit;
+        color: var(--text-primary);
+        resize: vertical;
+    }
+    .drawer-notes textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+
+    /* Audit trail */
+    .drawer-audit {
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.5;
+    }
+
+    /* Apply button */
+    .drawer-actions {
+        margin-top: 20px;
+        display: flex;
+        gap: 8px;
+    }
+    .drawer-apply-btn {
+        padding: 8px 16px;
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+    .drawer-apply-btn:hover { background: var(--accent-hover); }
+    .drawer-cancel-btn {
+        padding: 8px 16px;
+        background: white;
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 13px;
+        cursor: pointer;
+    }
+    .drawer-cancel-btn:hover { background: #f7fafc; }
+</style>
+
+<div class="drawer-content" data-txn-id="{{ txn.id }}">
+    <!-- Header -->
+    <div class="drawer-header">
+        <div class="drawer-title">{{ txn.description }}</div>
+        <button class="drawer-close" onclick="BookkeepingDrawer.close()" title="Close (Esc)">&times;</button>
+    </div>
+
+    <!-- Amount section -->
+    <div class="drawer-section">
+        <div class="drawer-section-label">Amount</div>
+        <div class="drawer-amount-block">
+            <span class="drawer-amount-primary">${{ "%.2f"|format(txn.cad_amount if txn.cad_amount is not none else txn.original_amount) }}</span>
+            {% if txn.original_currency != 'CAD' %}
+            <span class="drawer-amount-original">
+                {{ txn.original_currency }} {{ "%.2f"|format(txn.original_amount) }}
+                {% if txn.fx_rate %}@ {{ "%.6f"|format(txn.fx_rate) }}{% endif %}
+            </span>
+            {% endif %}
+        </div>
+        {% if txn.original_currency != 'CAD' %}
+        <div class="drawer-rate-source">
+            Rate source:
+            {% if txn.fx_rate_source == 'statement' %}statement
+            {% elif txn.fx_rate_source == 'boc_average' %}BoC daily average
+            {% elif txn.fx_rate_source == 'manual' %}manual
+            {% else %}{{ txn.fx_rate_source or 'unknown' }}
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Details grid -->
+    <div class="drawer-section">
+        <div class="drawer-section-label">Details</div>
+        <div class="drawer-meta-grid">
+            <span class="drawer-meta-key">Date</span>
+            <span class="drawer-meta-val">{{ txn.cash_date.strftime("%Y-%m-%d") }}</span>
+            <span class="drawer-meta-key">Issuer</span>
+            <span class="drawer-meta-val">{{ txn.source or 'unknown' }}</span>
+            {% if txn.statement %}
+            <span class="drawer-meta-key">Statement</span>
+            <span class="drawer-meta-val">{{ txn.statement.filename }}</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Category with top guesses -->
+    <div class="drawer-section">
+        <div class="drawer-section-label">Category</div>
+        <div class="drawer-guess-list" id="drawer-category-list">
+            {% for guess in top_guesses %}
+            <button class="drawer-guess-btn{% if guess.category_id == effective_category_id %} selected{% endif %}"
+                    data-category-id="{{ guess.category_id }}"
+                    onclick="drawerSelectCategory(this)">
+                {{ guess.category_name }}
+                <span class="drawer-guess-confidence">{{ "%.0f"|format(guess.confidence * 100) }}%</span>
+            </button>
+            {% endfor %}
+            {% if top_guesses | length < categories | length %}
+            <select id="drawer-other-category" onchange="drawerSelectOtherCategory(this)" style="margin-top:4px; font-size:13px; padding:4px 8px; border:1px solid var(--border-color); border-radius:4px; color:var(--text-secondary);">
+                <option value="">Other category...</option>
+                {% for cat in categories %}
+                {% if cat.id not in top_guesses | map(attribute='category_id') | list %}
+                <option value="{{ cat.id }}">{{ cat.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Responsibility -->
+    <div class="drawer-section">
+        <div class="drawer-section-label">Responsibility</div>
+        <div class="drawer-resp-options" id="drawer-resp-options">
+            <button class="drawer-resp-btn{% if effective_split == 'A' %} selected{% endif %}"
+                    data-split="A" onclick="drawerSelectResp(this)">A</button>
+            <button class="drawer-resp-btn{% if effective_split == 'K' %} selected{% endif %}"
+                    data-split="K" onclick="drawerSelectResp(this)">K</button>
+            <button class="drawer-resp-btn{% if effective_split == 'A/K' %} selected{% endif %}"
+                    data-split="A/K" onclick="drawerSelectResp(this)">A/K</button>
+        </div>
+    </div>
+
+    <!-- Accounting period -->
+    <div class="drawer-section">
+        <div class="drawer-section-label">Accounting period</div>
+        <div class="drawer-period-row">
+            <input type="month" id="drawer-period"
+                   value="{{ "%04d-%02d"|format(txn.accounting_period_year, txn.accounting_period_month) }}"
+                   min="2024-01" max="2028-12">
+            <span class="drawer-period-cash">Cash date: {{ txn.cash_date.strftime("%Y-%m-%d") }}</span>
+        </div>
+        {% if txn.accounting_period_is_override %}
+        <div style="font-size:11px; color:var(--amber); margin-top:4px;">Manually overridden</div>
+        {% endif %}
+    </div>
+
+    <!-- Notes -->
+    <div class="drawer-section drawer-notes">
+        <div class="drawer-section-label">Notes</div>
+        <textarea id="drawer-notes" placeholder="Add a note...">{{ pending.get('notes', txn.notes or '') }}</textarea>
+    </div>
+
+    <!-- Audit trail -->
+    <div class="drawer-section">
+        <div class="drawer-section-label">Classifier audit</div>
+        <div class="drawer-audit">
+            {% if txn.classifier_source and txn.classifier_confidence is not none %}
+            classified by {{ txn.classifier_source }} at {{ "%.2f"|format(txn.classifier_confidence) }} on {{ txn.created_at.strftime("%Y-%m-%d") }}
+            {% else %}
+            No classification data available.
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="drawer-actions">
+        <button class="drawer-apply-btn" onclick="drawerApply()">Apply changes</button>
+        <button class="drawer-cancel-btn" onclick="BookkeepingDrawer.close()">Cancel</button>
+    </div>
+</div>
+
+<script>
+(function() {
+    function getDrawerContent() {
+        return document.querySelector('.drawer-content[data-txn-id]');
+    }
+
+    window.drawerSelectCategory = function(btn) {
+        var list = document.getElementById('drawer-category-list');
+        list.querySelectorAll('.drawer-guess-btn').forEach(function(b) { b.classList.remove('selected'); });
+        btn.classList.add('selected');
+        /* Reset the "Other" dropdown */
+        var otherSel = document.getElementById('drawer-other-category');
+        if (otherSel) otherSel.value = '';
+    };
+
+    window.drawerSelectOtherCategory = function(sel) {
+        if (!sel.value) return;
+        /* Deselect all guess buttons */
+        var list = document.getElementById('drawer-category-list');
+        list.querySelectorAll('.drawer-guess-btn').forEach(function(b) { b.classList.remove('selected'); });
+    };
+
+    window.drawerSelectResp = function(btn) {
+        var container = document.getElementById('drawer-resp-options');
+        container.querySelectorAll('.drawer-resp-btn').forEach(function(b) { b.classList.remove('selected'); });
+        btn.classList.add('selected');
+    };
+
+    window.drawerApply = function() {
+        var content = getDrawerContent();
+        if (!content) return;
+        var txnId = content.dataset.txnId;
+
+        /* Collect selected category */
+        var selCat = content.querySelector('.drawer-guess-btn.selected');
+        var otherSel = document.getElementById('drawer-other-category');
+        var categoryId = '';
+        if (selCat) {
+            categoryId = selCat.dataset.categoryId;
+        } else if (otherSel && otherSel.value) {
+            categoryId = otherSel.value;
+        }
+
+        /* Collect responsibility */
+        var selResp = content.querySelector('.drawer-resp-btn.selected');
+        var splitMethod = selResp ? selResp.dataset.split : '';
+
+        /* Collect accounting period */
+        var periodInput = document.getElementById('drawer-period');
+        var periodValue = periodInput ? periodInput.value : '';
+
+        /* Collect notes */
+        var notesEl = document.getElementById('drawer-notes');
+        var notes = notesEl ? notesEl.value : '';
+
+        fetch('/transactions/' + txnId + '/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                category_id: categoryId,
+                split_method: splitMethod,
+                accounting_period: periodValue,
+                notes: notes
+            })
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.success) {
+                BookkeepingDrawer.close();
+                /* Reload the current page to reflect session changes */
+                window.location.reload();
+            }
+        });
+    };
+})();
+</script>

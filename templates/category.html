@@ -323,9 +323,11 @@
     const sidebarLinks = document.querySelectorAll('.sidebar a[data-category-slug]');
 
     /* --- Drag start / end on table rows --- */
+    window._dragging = false;
     function initDragOnRows() {
         document.querySelectorAll('#txn-table tbody tr[draggable]').forEach(function(row) {
             row.addEventListener('dragstart', function(e) {
+                window._dragging = true;
                 e.dataTransfer.setData('text/plain', row.dataset.txnId);
                 e.dataTransfer.effectAllowed = 'move';
                 row.classList.add('dragging');
@@ -340,6 +342,8 @@
                 sidebarLinks.forEach(function(a) {
                     a.classList.remove('drop-eligible', 'drag-over');
                 });
+                /* Delay reset so the click handler sees the flag */
+                setTimeout(function() { window._dragging = false; }, 100);
             });
         });
     }
