@@ -69,3 +69,36 @@ def remove_category_move(token: str, txn_id: str) -> None:
 def get_pending_count(token: str) -> int:
     """Return the number of pending edits in this session."""
     return len(_review_sessions.get(token, {}))
+
+
+def set_review_correction(
+    token: str,
+    txn_id: str,
+    category_id: str,
+    original_category_id: str,
+    split_method: str,
+    andrew_amount: str,
+    kristy_amount: str,
+) -> None:
+    """Store a review-queue correction for a transaction.
+
+    Merges with any existing pending edit (e.g. a prior responsibility toggle).
+    """
+    if token not in _review_sessions:
+        _review_sessions[token] = {}
+    existing = _review_sessions[token].get(txn_id, {})
+    existing.update({
+        "category_id": category_id,
+        "original_category_id": original_category_id,
+        "split_method": split_method,
+        "andrew_amount": andrew_amount,
+        "kristy_amount": kristy_amount,
+        "reviewed": True,
+    })
+    _review_sessions[token][txn_id] = existing
+
+
+def is_reviewed_in_session(token: str, txn_id: str) -> bool:
+    """Check if a transaction has been reviewed/accepted in this session."""
+    session = _review_sessions.get(token, {})
+    return session.get(txn_id, {}).get("reviewed", False)

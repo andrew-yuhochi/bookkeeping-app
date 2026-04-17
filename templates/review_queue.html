@@ -1,0 +1,603 @@
+{% extends "base.html" %}
+
+{% block title %}Needs Review — {{ "%04d-%02d"|format(period_year, period_month) }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .review-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .review-header-left {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    .review-count-label {
+        font-size: 14px;
+        color: var(--text-secondary);
+    }
+
+    .review-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .btn {
+        padding: 7px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: white;
+        color: var(--text-primary);
+        font-size: 13px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .btn:hover { background: #f7fafc; }
+
+    .btn-primary {
+        background: var(--accent);
+        color: white;
+        border-color: var(--accent);
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    .btn:disabled, .btn.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* --- Review item cards --- */
+    .review-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .review-item {
+        border: 2px solid var(--border-color);
+        border-radius: 6px;
+        padding: 16px 20px;
+        background: white;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .review-item.focused {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.15);
+    }
+
+    .review-item-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .review-merchant {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .review-meta {
+        display: flex;
+        gap: 16px;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .review-meta-item {
+        white-space: nowrap;
+    }
+
+    .review-amount {
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+    }
+
+    /* --- Guesses --- */
+    .review-guesses {
+        margin-bottom: 12px;
+    }
+
+    .review-guesses-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+    }
+
+    .guess-list {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .guess-btn {
+        padding: 5px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: white;
+        color: var(--text-primary);
+        font-size: 13px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: border-color 0.1s, background-color 0.1s;
+    }
+
+    .guess-btn:hover {
+        border-color: var(--accent);
+        background: #ebf8ff;
+    }
+
+    .guess-btn.selected {
+        border-color: var(--accent);
+        background: #ebf8ff;
+        font-weight: 500;
+    }
+
+    .guess-key {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        background: #f0f0f0;
+        padding: 1px 5px;
+        border-radius: 3px;
+        min-width: 16px;
+        text-align: center;
+    }
+
+    .guess-confidence {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* --- Responsibility row --- */
+    .review-responsibility {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .resp-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+    }
+
+    .resp-options {
+        display: flex;
+        gap: 6px;
+    }
+
+    .resp-btn {
+        padding: 4px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: white;
+        color: var(--text-secondary);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: border-color 0.1s, background-color 0.1s;
+    }
+
+    .resp-btn:hover {
+        border-color: var(--accent);
+        background: #ebf8ff;
+    }
+
+    .resp-btn.selected {
+        border-color: var(--accent);
+        background: #ebf8ff;
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    /* --- Item action row --- */
+    .review-item-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .review-item-actions .btn {
+        font-size: 12px;
+        padding: 5px 12px;
+    }
+
+    /* --- Empty state --- */
+    .empty-state {
+        text-align: center;
+        padding: 80px 20px;
+        color: var(--text-secondary);
+    }
+
+    .empty-state p {
+        font-size: 15px;
+        margin-bottom: 12px;
+    }
+
+    .empty-state a {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 13px;
+    }
+
+    .empty-state a:hover { text-decoration: underline; }
+
+    /* --- Keyboard help --- */
+    .keyboard-help {
+        margin-top: 20px;
+        padding: 12px 16px;
+        background: var(--bg-sidebar);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .keyboard-help kbd {
+        display: inline-block;
+        padding: 1px 5px;
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="review-header">
+    <div class="review-header-left">
+        <h1 class="page-title" style="margin-bottom:0">Needs Review</h1>
+        <span class="review-count-label" id="remaining-label">
+            {% if remaining_count > 0 %}
+                {{ remaining_count }} transaction{{ 's' if remaining_count != 1 else '' }}, {{ "%04d-%02d"|format(period_year, period_month) }}
+            {% endif %}
+        </span>
+    </div>
+    {% if review_items %}
+    <div class="review-actions">
+        <form method="post" action="/review/accept-all-confident?year={{ period_year }}&month={{ period_month }}" style="display:inline">
+            <button type="submit" class="btn">Accept all confident guesses</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+{% if review_items %}
+<div class="review-list" id="review-list">
+    {% for item in review_items %}
+    {% set txn = item.txn %}
+    {% set guesses = item.top_guesses %}
+    <div class="review-item{% if loop.first %} focused{% endif %}"
+         id="review-item-{{ txn.id }}"
+         data-txn-id="{{ txn.id }}"
+         data-index="{{ loop.index0 }}"
+         data-current-category="{{ txn.category_id }}"
+         data-current-split="{{ txn.split_method }}">
+
+        <div class="review-item-header">
+            <span class="review-merchant">{{ txn.description }}</span>
+            <div class="review-meta">
+                <span class="review-meta-item">{{ txn.cash_date.strftime("%Y-%m-%d") }}</span>
+                <span class="review-meta-item review-amount">${{ "%.2f"|format(txn.cad_amount if txn.cad_amount is not none else txn.original_amount) }}</span>
+                {% if txn.original_currency != 'CAD' %}
+                <span class="review-meta-item">{{ txn.original_currency }} {{ "%.2f"|format(txn.original_amount) }}</span>
+                {% endif %}
+                <span class="review-meta-item">{{ item.source_label }}</span>
+            </div>
+        </div>
+
+        <div class="review-guesses">
+            <div class="review-guesses-label">Classifier guesses</div>
+            <div class="guess-list">
+                {% for guess in guesses %}
+                <button class="guess-btn{% if loop.first %} selected{% endif %}"
+                        data-category-id="{{ guess.category_id }}"
+                        data-key="{{ loop.index }}">
+                    <span class="guess-key">{{ loop.index }}</span>
+                    {{ guess.category_name }}
+                    <span class="guess-confidence">({{ "%.0f"|format(guess.confidence * 100) }}%)</span>
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="review-responsibility">
+            <span class="resp-label">Responsibility</span>
+            <div class="resp-options">
+                <button class="resp-btn{% if txn.split_method == 'A' %} selected{% endif %}" data-split="A">A</button>
+                <button class="resp-btn{% if txn.split_method == 'K' %} selected{% endif %}" data-split="K">K</button>
+                <button class="resp-btn{% if txn.split_method == 'A/K' %} selected{% endif %}" data-split="A/K">A/K</button>
+            </div>
+        </div>
+
+        <div class="review-item-actions">
+            <button class="btn btn-primary accept-btn">Accept</button>
+            <button class="btn skip-btn">Skip</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="keyboard-help">
+    <span><kbd>J</kbd> / <kbd>K</kbd> Navigate items</span>
+    <span><kbd>Enter</kbd> Accept</span>
+    <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Pick category</span>
+    <span><kbd>A</kbd> <kbd>K</kbd> <kbd>S</kbd> Set responsibility</span>
+    <span><kbd>Space</kbd> Skip</span>
+</div>
+
+{% else %}
+<div class="empty-state">
+    <p>All transactions reviewed.</p>
+    <a href="/overview?year={{ period_year }}&month={{ period_month }}">Go to Overview</a>
+</div>
+{% endif %}
+
+{# OOB target for badge updates #}
+<span id="review-badge"
+      hx-swap-oob="true"
+      class="badge"
+      {% if not remaining_count %}style="display:none"{% endif %}>
+    {{ remaining_count }}
+</span>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+    var focusedIndex = 0;
+    var items = [];
+
+    function refreshItems() {
+        items = Array.from(document.querySelectorAll('.review-item'));
+    }
+    refreshItems();
+
+    function setFocus(newIndex) {
+        if (items.length === 0) return;
+        newIndex = Math.max(0, Math.min(newIndex, items.length - 1));
+        items.forEach(function(el) { el.classList.remove('focused'); });
+        items[newIndex].classList.add('focused');
+        items[newIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        focusedIndex = newIndex;
+    }
+
+    function getSelectedCategory(item) {
+        var sel = item.querySelector('.guess-btn.selected');
+        return sel ? sel.dataset.categoryId : item.dataset.currentCategory;
+    }
+
+    function getSelectedSplit(item) {
+        var sel = item.querySelector('.resp-btn.selected');
+        return sel ? sel.dataset.split : item.dataset.currentSplit;
+    }
+
+    function selectGuess(item, keyNum) {
+        var btn = item.querySelector('.guess-btn[data-key="' + keyNum + '"]');
+        if (!btn) return;
+        item.querySelectorAll('.guess-btn').forEach(function(b) { b.classList.remove('selected'); });
+        btn.classList.add('selected');
+    }
+
+    function selectResp(item, split) {
+        item.querySelectorAll('.resp-btn').forEach(function(b) { b.classList.remove('selected'); });
+        var btn = item.querySelector('.resp-btn[data-split="' + split + '"]');
+        if (btn) btn.classList.add('selected');
+    }
+
+    function acceptItem(item) {
+        var txnId = item.dataset.txnId;
+        var catId = getSelectedCategory(item);
+        var split = getSelectedSplit(item);
+
+        var yearMatch = window.location.search.match(/year=(\d+)/);
+        var monthMatch = window.location.search.match(/month=(\d+)/);
+        var qs = '';
+        if (yearMatch && monthMatch) {
+            qs = '?year=' + yearMatch[1] + '&month=' + monthMatch[1];
+        }
+
+        fetch('/review/corrections/' + txnId + qs, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({category_id: catId, split_method: split})
+        })
+        .then(function(resp) { return resp.text(); })
+        .then(function(html) {
+            /* Remove the item from the DOM */
+            item.remove();
+            refreshItems();
+
+            /* Parse remaining count from the response */
+            var tmp = document.createElement('div');
+            tmp.innerHTML = html;
+
+            /* Update badge via OOB swap data */
+            var oobBadge = tmp.querySelector('#review-badge');
+            if (oobBadge) {
+                var badge = document.getElementById('review-badge');
+                if (badge) {
+                    badge.textContent = oobBadge.textContent.trim();
+                    var count = parseInt(oobBadge.textContent.trim(), 10);
+                    badge.style.display = count > 0 ? '' : 'none';
+                }
+            }
+
+            var oobRemaining = tmp.querySelector('#remaining-label');
+            if (oobRemaining) {
+                var label = document.getElementById('remaining-label');
+                if (label) label.innerHTML = oobRemaining.innerHTML;
+            }
+
+            /* Update remaining count label */
+            if (items.length === 0) {
+                document.getElementById('review-list').innerHTML =
+                    '<div class="empty-state"><p>All transactions reviewed.</p>' +
+                    '<a href="/overview">Go to Overview</a></div>';
+                /* Hide actions */
+                var actions = document.querySelector('.review-actions');
+                if (actions) actions.style.display = 'none';
+                var help = document.querySelector('.keyboard-help');
+                if (help) help.style.display = 'none';
+                var label = document.getElementById('remaining-label');
+                if (label) label.textContent = '';
+            } else {
+                /* Update remaining label */
+                var label = document.getElementById('remaining-label');
+                if (label) {
+                    label.textContent = items.length + ' transaction' + (items.length !== 1 ? 's' : '') + ' remaining';
+                }
+                /* Focus next item (or last if we were at the end) */
+                setFocus(Math.min(focusedIndex, items.length - 1));
+            }
+        });
+    }
+
+    function skipItem() {
+        if (items.length === 0) return;
+        if (focusedIndex < items.length - 1) {
+            setFocus(focusedIndex + 1);
+        }
+        /* If at last item, stay — skip means "defer to later" */
+    }
+
+    /* --- Click handlers on guess buttons --- */
+    document.addEventListener('click', function(e) {
+        var guessBtn = e.target.closest('.guess-btn');
+        if (guessBtn) {
+            var item = guessBtn.closest('.review-item');
+            item.querySelectorAll('.guess-btn').forEach(function(b) { b.classList.remove('selected'); });
+            guessBtn.classList.add('selected');
+            return;
+        }
+
+        var respBtn = e.target.closest('.resp-btn');
+        if (respBtn) {
+            var item = respBtn.closest('.review-item');
+            item.querySelectorAll('.resp-btn').forEach(function(b) { b.classList.remove('selected'); });
+            respBtn.classList.add('selected');
+            return;
+        }
+
+        var acceptBtn = e.target.closest('.accept-btn');
+        if (acceptBtn) {
+            var item = acceptBtn.closest('.review-item');
+            acceptItem(item);
+            return;
+        }
+
+        var skipBtn = e.target.closest('.skip-btn');
+        if (skipBtn) {
+            skipItem();
+            return;
+        }
+
+        /* Click on a review item to focus it */
+        var reviewItem = e.target.closest('.review-item');
+        if (reviewItem) {
+            var idx = items.indexOf(reviewItem);
+            if (idx >= 0) setFocus(idx);
+        }
+    });
+
+    /* --- Keyboard navigation --- */
+    document.addEventListener('keydown', function(e) {
+        /* Ignore if typing in an input/textarea */
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+        if (items.length === 0) return;
+
+        var item = items[focusedIndex];
+        if (!item) return;
+
+        switch (e.key) {
+            case 'j':
+            case 'ArrowDown':
+                e.preventDefault();
+                setFocus(focusedIndex + 1);
+                break;
+            case 'k':
+            case 'ArrowUp':
+                e.preventDefault();
+                setFocus(focusedIndex - 1);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                acceptItem(item);
+                break;
+            case '1':
+                e.preventDefault();
+                selectGuess(item, '1');
+                break;
+            case '2':
+                e.preventDefault();
+                selectGuess(item, '2');
+                break;
+            case '3':
+                e.preventDefault();
+                selectGuess(item, '3');
+                break;
+            case 'a':
+                e.preventDefault();
+                selectResp(item, 'A');
+                break;
+            case 's':
+                e.preventDefault();
+                selectResp(item, 'A/K');
+                break;
+            case ' ':
+                e.preventDefault();
+                skipItem();
+                break;
+        }
+
+        /* 'K' (uppercase) is for responsibility, 'k' (lowercase) is navigate up.
+           Handle uppercase K separately since the switch already handles lowercase k. */
+    });
+
+    /* Handle uppercase K for responsibility (shift+k) */
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+        if (items.length === 0) return;
+
+        if (e.key === 'K' && e.shiftKey) {
+            e.preventDefault();
+            var item = items[focusedIndex];
+            if (item) selectResp(item, 'K');
+        }
+    });
+})();
+</script>
+{% endblock %}

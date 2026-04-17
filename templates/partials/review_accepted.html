@@ -1,0 +1,19 @@
+{# HTMX response for POST /review/corrections/{txn_id}.
+   The main content is empty (the item is removed client-side).
+   OOB swaps update the sidebar badge and remaining count label.
+   Expects: txn_id, remaining_count #}
+
+{# OOB: update sidebar badge #}
+<span id="review-badge"
+      hx-swap-oob="true"
+      class="badge"
+      {% if not remaining_count %}style="display:none"{% endif %}>
+    {{ remaining_count }}
+</span>
+
+{# OOB: update remaining label #}
+<span id="remaining-label" hx-swap-oob="true">
+    {% if remaining_count > 0 %}
+        {{ remaining_count }} transaction{{ 's' if remaining_count != 1 else '' }} remaining
+    {% endif %}
+</span>

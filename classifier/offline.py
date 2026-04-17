@@ -84,6 +84,23 @@ class _TrainedModel:
 
         return category, cat_confidence, responsibility, resp_confidence
 
+    def predict_top_n(
+        self, normalized_description: str, n: int = 3,
+    ) -> list[tuple[str, float]]:
+        """Return top-N category predictions with confidence scores.
+
+        Returns:
+            List of (category_id, confidence) sorted by confidence descending.
+        """
+        cat_proba = self.category_pipeline.predict_proba([normalized_description])[0]
+        indexed = sorted(
+            enumerate(cat_proba), key=lambda x: x[1], reverse=True,
+        )[:n]
+        return [
+            (self.category_classes[idx], float(conf))
+            for idx, conf in indexed
+        ]
+
 
 class OfflineClassifierClient(ClassifierClient):
     """Offline classifier using exact-match cache + TF-IDF + LR.
