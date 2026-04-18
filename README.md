@@ -44,8 +44,8 @@ notebooks/             # Exploration notebooks
 
 ## Documentation
 
-- [Discovery Notes](../../docs/pocs/bookkeeping-app/DISCOVERY-NOTES.md)
-- [PRD](../../docs/pocs/bookkeeping-app/PRD.md)
-- [TDD](../../docs/pocs/bookkeeping-app/TDD.md)
-- [Data Sources](../../docs/pocs/bookkeeping-app/DATA-SOURCES.md)
-- [Tasks](../../docs/pocs/bookkeeping-app/TASKS.md)
+- [Discovery Notes](../../docs/bookkeeping-app/poc/DISCOVERY-NOTES.md)
+- [PRD](../../docs/bookkeeping-app/poc/PRD.md)
+- [TDD](../../docs/bookkeeping-app/poc/TDD.md)
+- [Data Sources](../../docs/bookkeeping-app/poc/DATA-SOURCES.md)
+- [Tasks](../../docs/bookkeeping-app/poc/TASKS.md)

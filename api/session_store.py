@@ -71,6 +71,12 @@ def get_pending_count(token: str) -> int:
     return len(_review_sessions.get(token, {}))
 
 
+def clear_session(token: str) -> None:
+    """Clear all pending edits for this session after a successful save."""
+    if token in _review_sessions:
+        _review_sessions[token] = {}
+
+
 def set_review_correction(
     token: str,
     txn_id: str,

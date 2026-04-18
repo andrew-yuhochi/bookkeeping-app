@@ -1,10 +1,13 @@
 """Needs-Review Queue routes — review flagged transactions."""
 
 import logging
+import threading
+import uuid as _uuid_lib
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -18,13 +21,20 @@ from api.dependencies import (
 )
 from api.helpers import compute_split_amounts, get_top_guesses
 from api.session_store import (
+    SESSION_COOKIE,
     _review_sessions,
+    clear_session,
+    get_pending_count,
+    get_pending_edits,
     get_session_token,
     is_reviewed_in_session,
     set_review_correction,
     set_session_cookie,
 )
-from db.models import Transaction
+from db.models import Correction, ExactMatchCache, Transaction, User
+
+# Retrain status store: {retrain_id: {"status": "running"|"done"|"error", ...}}
+_retrain_status: dict[str, dict] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -251,3 +261,189 @@ async def accept_all_confident(
     )
     set_session_cookie(response, token)
     return response
+
+
+# ---------------------------------------------------------------------------
+# Pending count (for save button badge)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/review/pending-count")
+async def pending_count_endpoint(request: Request) -> JSONResponse:
+    """Return the number of pending edits for this session."""
+    token = request.cookies.get(SESSION_COOKIE, "")
+    count = get_pending_count(token)
+    return JSONResponse(content={"count": count})
+
+
+# ---------------------------------------------------------------------------
+# Save review session
+# ---------------------------------------------------------------------------
+
+
+@router.post("/review/save-session")
+async def save_session(
+    request: Request,
+    db: Session = Depends(get_db),
+    household_id: str = Depends(get_household_id),
+) -> JSONResponse:
+    """Commit all pending session edits to the DB and trigger classifier retrain.
+
+    All DB writes happen in a single transaction — if any write fails,
+    all changes roll back.  Classifier retrain runs in a background thread
+    so the endpoint returns immediately after committing.
+    """
+    token = get_session_token(request)
+    pending = get_pending_edits(request)
+
+    if not pending:
+        return JSONResponse(
+            content={"success": False, "reason": "no_changes"},
+            status_code=400,
+        )
+
+    # Resolve a user_id for Correction rows (Andrew = person_code "A")
+    andrew_user = db.execute(
+        select(User).where(
+            User.household_id == household_id,
+            User.person_code == "A",
+        )
+    ).scalar_one_or_none()
+    user_id = andrew_user.id if andrew_user else household_id
+
+    corrections_count = 0
+    try:
+        for txn_id, edit in pending.items():
+            txn = db.execute(
+                select(Transaction).where(Transaction.id == txn_id)
+            ).scalar_one_or_none()
+            if txn is None:
+                logger.warning("save-session: txn %s not found — skipping", txn_id)
+                continue
+
+            orig_category_id = txn.category_id
+            orig_split = txn.split_method
+            new_category_id = edit.get("category_id", txn.category_id)
+            new_split = edit.get("split_method", txn.split_method)
+
+            # Apply all field updates
+            txn.category_id = new_category_id
+            txn.split_method = new_split
+            if "andrew_amount" in edit:
+                txn.andrew_amount = edit["andrew_amount"]
+            if "kristy_amount" in edit:
+                txn.kristy_amount = edit["kristy_amount"]
+            if "notes" in edit and edit["notes"] is not None:
+                txn.notes = edit["notes"]
+            if "accounting_period_year" in edit:
+                txn.accounting_period_year = edit["accounting_period_year"]
+                txn.accounting_period_month = edit["accounting_period_month"]
+                txn.accounting_period_is_override = edit.get(
+                    "accounting_period_is_override", False
+                )
+            if edit.get("reviewed"):
+                txn.needs_review = False
+                txn.is_manually_reviewed = True
+
+            # Insert Correction row when category or split changed
+            if new_category_id != orig_category_id or new_split != orig_split:
+                db.add(
+                    Correction(
+                        household_id=household_id,
+                        transaction_id=txn_id,
+                        user_id=user_id,
+                        prev_category_id=orig_category_id,
+                        new_category_id=new_category_id,
+                        prev_split_method=orig_split,
+                        new_split_method=new_split,
+                    )
+                )
+                corrections_count += 1
+
+            # Upsert ExactMatchCache for this merchant
+            normalized = txn.normalized_description
+            if normalized:
+                now = datetime.utcnow()
+                cache_row = db.execute(
+                    select(ExactMatchCache).where(
+                        ExactMatchCache.household_id == household_id,
+                        ExactMatchCache.normalized_merchant == normalized,
+                    )
+                ).scalar_one_or_none()
+                if cache_row:
+                    if cache_row.category_id == new_category_id:
+                        cache_row.confirmation_count += 1
+                    else:
+                        cache_row.category_id = new_category_id
+                        cache_row.responsibility = new_split
+                        cache_row.confirmation_count = 1
+                    cache_row.last_confirmed_at = now
+                else:
+                    db.add(
+                        ExactMatchCache(
+                            household_id=household_id,
+                            normalized_merchant=normalized,
+                            category_id=new_category_id,
+                            responsibility=new_split,
+                            confirmation_count=1,
+                            last_confirmed_at=now,
+                        )
+                    )
+
+        db.commit()
+
+    except Exception as exc:
+        db.rollback()
+        logger.error("save-session DB error: %s", exc, exc_info=True)
+        return JSONResponse(
+            content={"success": False, "reason": "db_error", "message": str(exc)},
+            status_code=500,
+        )
+
+    # Clear session state
+    clear_session(token)
+
+    # Kick off background retrain with a fresh DB session
+    retrain_id = str(_uuid_lib.uuid4())
+    _retrain_status[retrain_id] = {"status": "running"}
+
+    classifier = get_classifier(db)
+
+    def _retrain_worker() -> None:
+        from db.session import SessionLocal
+
+        fresh_db = SessionLocal()
+        try:
+            classifier._session = fresh_db
+            metrics = classifier.retrain()
+            _retrain_status[retrain_id] = {"status": "done", "metrics": metrics}
+            logger.info("Background retrain complete: %s", metrics)
+        except Exception as exc:  # noqa: BLE001
+            _retrain_status[retrain_id] = {"status": "error", "message": str(exc)}
+            logger.error("Background retrain failed: %s", exc, exc_info=True)
+        finally:
+            fresh_db.close()
+
+    threading.Thread(target=_retrain_worker, daemon=True).start()
+
+    response = JSONResponse(
+        content={
+            "success": True,
+            "corrections_count": corrections_count,
+            "retrain_id": retrain_id,
+        }
+    )
+    set_session_cookie(response, token)
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Retrain status poll
+# ---------------------------------------------------------------------------
+
+
+@router.get("/review/retrain-status/{retrain_id}")
+async def get_retrain_status(retrain_id: str) -> JSONResponse:
+    """Return the current status of a background retrain job."""
+    status = _retrain_status.get(retrain_id, {"status": "unknown"})
+    return JSONResponse(content=status)

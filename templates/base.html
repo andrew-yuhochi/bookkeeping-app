@@ -217,6 +217,14 @@
             </span>
         </a>
 
+        <div style="padding: 4px 16px 8px;">
+            <button id="save-session-btn"
+                    onclick="BookkeepingSave.prompt()"
+                    style="width:100%;padding:7px 12px;font-size:13px;background:#2d3748;color:#718096;border:1px solid #4a5568;border-radius:4px;cursor:pointer;text-align:left;">
+                Save session
+            </button>
+        </div>
+
         <div class="sidebar-divider"></div>
         <div class="sidebar-section">Expenses</div>
 
@@ -254,6 +262,131 @@
     <div class="drawer-panel" id="drawer-panel"></div>
 
     <script>
+    /* --- Global toast helper --- */
+    window.showToast = function(msg, type) {
+        var container = document.getElementById('toast-container');
+        if (!container) return;
+        var el = document.createElement('div');
+        el.className = 'toast';
+        if (type === 'error') el.style.background = 'var(--red)';
+        el.textContent = msg;
+        container.appendChild(el);
+        setTimeout(function() { if (el.parentNode) el.remove(); }, 5000);
+    };
+
+    /* --- Save session module --- */
+    window.BookkeepingSave = (function() {
+        var _hasPending = false;
+
+        function _setSaveBtn(active) {
+            var btn = document.getElementById('save-session-btn');
+            if (!btn) return;
+            btn.style.background = active ? 'var(--accent)' : '#2d3748';
+            btn.style.color = active ? 'white' : '#718096';
+        }
+
+        function markPending() {
+            _hasPending = true;
+            _setSaveBtn(true);
+        }
+
+        function _clearPending() {
+            _hasPending = false;
+            _setSaveBtn(false);
+        }
+
+        function prompt() {
+            fetch('/review/pending-count', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var count = data.count || 0;
+                    if (count === 0) {
+                        showToast('No pending changes to save.');
+                        return;
+                    }
+                    var ok = window.confirm(
+                        'Save ' + count + ' pending change(s)?\n' +
+                        'The classifier will retrain automatically (~2 seconds).'
+                    );
+                    if (!ok) return;
+                    _save();
+                })
+                .catch(function() { showToast('Could not reach server.', 'error'); });
+        }
+
+        function _save() {
+            var btn = document.getElementById('save-session-btn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+            fetch('/review/save-session', { method: 'POST', credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (btn) { btn.textContent = 'Save session'; }
+                    if (!data.success) {
+                        showToast(data.message || 'Save failed.', 'error');
+                        if (btn) btn.disabled = false;
+                        return;
+                    }
+                    _clearPending();
+                    showToast('Saved ' + data.corrections_count + ' correction(s). Classifier retraining...');
+                    _pollRetrain(data.retrain_id, btn);
+                })
+                .catch(function() {
+                    if (btn) { btn.textContent = 'Save session'; btn.disabled = false; }
+                    showToast('Save failed. Please try again.', 'error');
+                });
+        }
+
+        function _pollRetrain(retrain_id, btn) {
+            var attempts = 0;
+            var iv = setInterval(function() {
+                attempts++;
+                fetch('/review/retrain-status/' + retrain_id, { credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.status === 'done') {
+                            clearInterval(iv);
+                            showToast('Classifier updated.');
+                            if (btn) btn.disabled = false;
+                        } else if (data.status === 'error') {
+                            clearInterval(iv);
+                            showToast('Changes saved. Classifier retrain failed.', 'error');
+                            if (btn) btn.disabled = false;
+                        } else if (attempts >= 60) {
+                            clearInterval(iv);
+                            if (btn) btn.disabled = false;
+                        }
+                    });
+            }, 1000);
+        }
+
+        /* Init: check server count on page load */
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/review/pending-count', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.count > 0) markPending();
+                });
+        });
+
+        /* Mark pending after any HTMX POST mutation */
+        document.body.addEventListener('htmx:afterRequest', function(e) {
+            if (!e.detail || !e.detail.successful) return;
+            var verb = e.detail.requestConfig && e.detail.requestConfig.verb;
+            if (verb === 'post' || verb === 'put') markPending();
+        });
+
+        /* beforeunload guard */
+        window.addEventListener('beforeunload', function(e) {
+            if (_hasPending) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        return { prompt: prompt, markPending: markPending };
+    })();
+
     /* --- Drawer open/close helpers (global) --- */
     window.BookkeepingDrawer = (function() {
         var overlay = document.getElementById('drawer-overlay');
