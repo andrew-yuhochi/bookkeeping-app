@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — Budget Envelopes{% endblock %}
+
+{% block extra_head %}
+<style>
+    .settings-section-heading {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .year-selector {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .year-selector label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    .year-selector select {
+        padding: 6px 10px;
+        font-size: 13px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: white;
+        color: var(--text-primary);
+    }
+
+    .env-form-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin-bottom: 20px;
+    }
+
+    .env-form-table th {
+        text-align: left;
+        padding: 8px 12px;
+        border-bottom: 2px solid var(--border-color);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+    }
+
+    .env-form-table td {
+        padding: 7px 12px;
+        border-bottom: 1px solid #f0f0f0;
+        vertical-align: middle;
+    }
+
+    .env-form-table tbody tr:hover {
+        background: #f7fafc;
+    }
+
+    .cat-name {
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .amount-input {
+        width: 110px;
+        padding: 5px 8px;
+        font-size: 13px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        color: var(--text-primary);
+    }
+
+    .amount-input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.15);
+    }
+
+    .monthly-hint {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-left: 6px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .save-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 4px;
+    }
+
+    .btn-save {
+        padding: 8px 20px;
+        font-size: 13px;
+        font-weight: 600;
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .btn-save:hover { background: var(--accent-hover); }
+
+    .alert {
+        padding: 10px 14px;
+        border-radius: 4px;
+        font-size: 13px;
+        margin-bottom: 16px;
+    }
+
+    .alert-error {
+        background: #fff5f5;
+        border: 1px solid #fed7d7;
+        color: var(--red);
+    }
+
+    .alert-success {
+        background: #f0fff4;
+        border: 1px solid #c6f6d5;
+        color: var(--green);
+    }
+
+    .note {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Settings</h1>
+
+<div class="settings-section-heading">Budget Envelopes</div>
+
+{% if error == "invalid_amount" %}
+<div class="alert alert-error">Invalid amount — please enter a number (e.g. 1200 or 1200.00).</div>
+{% elif error == "negative_amount" %}
+<div class="alert alert-error">Amounts cannot be negative.</div>
+{% elif error == "invalid_year" %}
+<div class="alert alert-error">Invalid year.</div>
+{% endif %}
+
+{% if request.query_params.get("saved") %}
+<div class="alert alert-success">Budget envelopes saved for {{ period_year }}.</div>
+{% endif %}
+
+<form method="post" action="/settings/envelopes">
+    <input type="hidden" name="period_year" value="{{ period_year }}">
+
+    <div class="year-selector">
+        <label for="year-select">Year:</label>
+        <select id="year-select" onchange="this.form.querySelector('[name=period_year]').value=this.value; window.location.href='/settings?year='+this.value;">
+            {% for y in years %}
+            <option value="{{ y }}" {% if y == period_year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <table class="env-form-table">
+        <thead>
+            <tr>
+                <th style="width: 200px;">Category</th>
+                <th>Andrew (annual)</th>
+                <th>Andrew (monthly)</th>
+                <th>Kristy (annual)</th>
+                <th>Kristy (monthly)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in envelope_rows %}
+            <tr>
+                <td class="cat-name">{{ row.category.name }}</td>
+                <td>
+                    <div style="display:flex;align-items:center;">
+                        <span style="color:var(--text-muted);margin-right:4px;">$</span>
+                        <input
+                            type="text"
+                            name="envelope_{{ row.category.id }}_A"
+                            class="amount-input"
+                            value="{{ '%.2f'|format(row.andrew_annual) }}"
+                            placeholder="0.00"
+                            inputmode="decimal"
+                        >
+                    </div>
+                </td>
+                <td>
+                    <span class="monthly-hint" id="monthly-a-{{ loop.index }}">
+                        ${{ '%.2f'|format(row.andrew_annual / 12) }}/mo
+                    </span>
+                </td>
+                <td>
+                    <div style="display:flex;align-items:center;">
+                        <span style="color:var(--text-muted);margin-right:4px;">$</span>
+                        <input
+                            type="text"
+                            name="envelope_{{ row.category.id }}_K"
+                            class="amount-input"
+                            value="{{ '%.2f'|format(row.kristy_annual) }}"
+                            placeholder="0.00"
+                            inputmode="decimal"
+                        >
+                    </div>
+                </td>
+                <td>
+                    <span class="monthly-hint" id="monthly-k-{{ loop.index }}">
+                        ${{ '%.2f'|format(row.kristy_annual / 12) }}/mo
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="save-row">
+        <button type="submit" class="btn-save">Save envelopes</button>
+        <span class="note">Annual amounts — monthly budget = annual / 12</span>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* Live monthly-hint update as user types */
+document.querySelectorAll('.amount-input').forEach(function(input) {
+    var name = input.name; // envelope_{cat_id}_{A|K}
+    var parts = name.split('_');
+    var person = parts[parts.length - 1];  // "A" or "K"
+    var rowIndex = input.closest('tr').rowIndex;  // 1-based within tbody
+
+    function updateHint() {
+        var val = parseFloat(input.value.replace(/,/g, ''));
+        var hint = input.closest('tr').querySelector(
+            person === 'A' ? '[id^="monthly-a-"]' : '[id^="monthly-k-"]'
+        );
+        if (!hint) return;
+        if (!isNaN(val) && val >= 0) {
+            hint.textContent = '$' + (val / 12).toFixed(2) + '/mo';
+        } else {
+            hint.textContent = '—';
+        }
+    }
+
+    input.addEventListener('input', updateHint);
+});
+</script>
+{% endblock %}

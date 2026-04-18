@@ -15,6 +15,7 @@ from api.routes.category import router as category_router
 from api.routes.health import router as health_router
 from api.routes.overview import router as overview_router
 from api.routes.review import router as review_router
+from api.routes.settings import router as settings_router
 from api.routes.transactions import router as transactions_router
 from api.routes.upload import router as upload_router
 
@@ -42,6 +43,7 @@ app.include_router(upload_router)
 app.include_router(category_router)
 app.include_router(review_router)
 app.include_router(transactions_router)
+app.include_router(settings_router)
 
 
 @app.get("/")
