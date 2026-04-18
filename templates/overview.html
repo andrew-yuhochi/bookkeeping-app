@@ -2,10 +2,428 @@
 
 {% block title %}Overview — {{ "%04d-%02d"|format(period_year, period_month) }}{% endblock %}
 
+{% block extra_head %}
+<style>
+    /* --- Summary cards --- */
+    .summary-grid {
+        display: grid;
+        grid-template-columns: 140px repeat(3, 1fr);
+        gap: 0;
+        margin-bottom: 28px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        overflow: hidden;
+        font-size: 13px;
+    }
+
+    .summary-grid .hdr {
+        padding: 8px 14px;
+        background: var(--bg-sidebar);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .summary-grid .row-label {
+        padding: 10px 14px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        background: var(--bg-sidebar);
+        border-right: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+    }
+
+    .summary-grid .row-label:last-of-type { border-bottom: 0; }
+
+    .summary-cell {
+        padding: 10px 14px;
+        font-variant-numeric: tabular-nums;
+        border-right: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+    }
+
+    .summary-cell:last-child { border-right: 0; }
+    .summary-cell.last-row { border-bottom: 0; }
+
+    .summary-cell.income { color: var(--green); }
+    .summary-cell.expense { color: var(--red); }
+    .summary-cell.net-pos { color: var(--green); font-weight: 600; }
+    .summary-cell.net-neg { color: var(--red); font-weight: 600; }
+    .summary-cell.net-zero { color: var(--text-secondary); font-weight: 600; }
+
+    /* --- Section headings --- */
+    .section-heading {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+        margin-top: 28px;
+    }
+    .section-heading:first-of-type { margin-top: 0; }
+
+    /* --- Envelope grid --- */
+    .env-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin-bottom: 8px;
+    }
+
+    .env-table th {
+        text-align: left;
+        padding: 7px 10px;
+        border-bottom: 2px solid var(--border-color);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+    }
+
+    .env-table td {
+        padding: 7px 10px;
+        border-bottom: 1px solid #f0f0f0;
+        vertical-align: middle;
+    }
+
+    .env-table tbody tr:hover { background: #f7fafc; }
+
+    .env-cat-link {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .env-cat-link:hover { text-decoration: underline; }
+
+    .status-icon {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .status-icon.green { color: var(--green); }
+    .status-icon.amber { color: var(--amber); }
+    .status-icon.red   { color: var(--red); }
+    .status-icon.none  { color: var(--text-muted); }
+
+    .pct-text {
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--text-muted);
+        margin-left: 4px;
+    }
+
+    /* --- MoM table --- */
+    .mom-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin-bottom: 8px;
+    }
+
+    .mom-table th {
+        text-align: left;
+        padding: 7px 10px;
+        border-bottom: 2px solid var(--border-color);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+    }
+
+    .mom-table td {
+        padding: 7px 10px;
+        border-bottom: 1px solid #f0f0f0;
+        font-variant-numeric: tabular-nums;
+        vertical-align: middle;
+    }
+
+    .mom-table tbody tr:hover { background: #f7fafc; }
+
+    .change-up   { color: var(--red); }
+    .change-down { color: var(--green); }
+    .change-zero { color: var(--text-muted); }
+
+    /* --- Classifier panel --- */
+    .perf-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-bottom: 16px;
+    }
+
+    .perf-card {
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 14px 16px;
+    }
+
+    .perf-card-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+    }
+
+    .perf-card-value {
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--text-primary);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .histogram-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 3px;
+        font-size: 12px;
+    }
+
+    .histogram-label {
+        width: 72px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+    }
+
+    .histogram-bar-track {
+        flex: 1;
+        background: #edf2f7;
+        border-radius: 2px;
+        height: 14px;
+    }
+
+    .histogram-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+        background: var(--accent);
+        min-width: 2px;
+    }
+
+    .histogram-count {
+        width: 28px;
+        text-align: right;
+        color: var(--text-secondary);
+        flex-shrink: 0;
+    }
+
+    /* --- Empty state --- */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-secondary);
+    }
+    .empty-state p { font-size: 14px; margin-bottom: 8px; }
+    .empty-state a { color: var(--accent); text-decoration: none; font-size: 13px; }
+    .empty-state a:hover { text-decoration: underline; }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1 class="page-title">Overview — {{ "%04d-%02d"|format(period_year, period_month) }}</h1>
 
-<p style="color: var(--text-secondary);">
-    Overview page content will be implemented in TASK-023.
-</p>
+{% if not has_transactions %}
+<div class="empty-state">
+    <p>No transactions for {{ "%04d-%02d"|format(period_year, period_month) }}.</p>
+    <a href="/upload">Upload statements to get started</a>
+</div>
+{% else %}
+
+{# ---- Monthly Snapshot ---- #}
+<div class="section-heading">Monthly Snapshot</div>
+
+<div class="summary-grid">
+    {# Header row #}
+    <div class="hdr"></div>
+    <div class="hdr">Income</div>
+    <div class="hdr">Expense</div>
+    <div class="hdr">Net</div>
+
+    {# Andrew row #}
+    <div class="row-label">Andrew</div>
+    <div class="summary-cell income">{{ "$%.2f"|format(income_andrew) }}</div>
+    <div class="summary-cell expense">{{ "$%.2f"|format(expense_andrew) }}</div>
+    <div class="summary-cell {% if net_andrew > 0 %}net-pos{% elif net_andrew < 0 %}net-neg{% else %}net-zero{% endif %}">
+        {{ "$%.2f"|format(net_andrew) }}
+    </div>
+
+    {# Kristy row #}
+    <div class="row-label">Kristy</div>
+    <div class="summary-cell income">{{ "$%.2f"|format(income_kristy) }}</div>
+    <div class="summary-cell expense">{{ "$%.2f"|format(expense_kristy) }}</div>
+    <div class="summary-cell {% if net_kristy > 0 %}net-pos{% elif net_kristy < 0 %}net-neg{% else %}net-zero{% endif %}">
+        {{ "$%.2f"|format(net_kristy) }}
+    </div>
+
+    {# Combined row #}
+    <div class="row-label">Combined</div>
+    <div class="summary-cell income last-row">{{ "$%.2f"|format(income_combined) }}</div>
+    <div class="summary-cell expense last-row">{{ "$%.2f"|format(expense_combined) }}</div>
+    <div class="summary-cell last-row {% if net_combined > 0 %}net-pos{% elif net_combined < 0 %}net-neg{% else %}net-zero{% endif %}">
+        {{ "$%.2f"|format(net_combined) }}
+    </div>
+</div>
+
+{# ---- Expense Envelope Grid ---- #}
+<div class="section-heading">Expense Envelopes</div>
+
+<table class="env-table">
+    <thead>
+        <tr>
+            <th style="width:200px;">Category</th>
+            <th>Andrew Actual</th>
+            <th>Andrew Budget</th>
+            <th>Andrew Status</th>
+            <th>Kristy Actual</th>
+            <th>Kristy Budget</th>
+            <th>Kristy Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in envelope_rows %}
+        <tr>
+            <td>
+                <a href="/category/{{ row.category.slug }}" class="env-cat-link">
+                    {{ row.category.name }}
+                </a>
+            </td>
+            <td style="font-variant-numeric:tabular-nums;">${{ "%.2f"|format(row.andrew_actual) }}</td>
+            <td style="font-variant-numeric:tabular-nums;color:var(--text-muted);">
+                {% if row.andrew_budget > 0 %}${{ "%.2f"|format(row.andrew_budget) }}{% else %}—{% endif %}
+            </td>
+            <td>
+                {% if row.andrew_status == "none" %}
+                <span class="status-icon none">—</span>
+                {% elif row.andrew_status == "green" %}
+                <span class="status-icon green">
+                    <span aria-label="OK" title="OK">&#10003;</span>
+                    {% if row.andrew_pct is not none %}<span class="pct-text">{{ "%.0f"|format(row.andrew_pct) }}%</span>{% endif %}
+                </span>
+                {% elif row.andrew_status == "amber" %}
+                <span class="status-icon amber">
+                    <span aria-label="Warning" title="Warning">&#9651;</span>
+                    {% if row.andrew_pct is not none %}<span class="pct-text">{{ "%.0f"|format(row.andrew_pct) }}%</span>{% endif %}
+                </span>
+                {% else %}
+                <span class="status-icon red">
+                    <span aria-label="Over budget" title="Over budget">&#10007;</span>
+                    {% if row.andrew_pct is not none %}<span class="pct-text">{{ "%.0f"|format(row.andrew_pct) }}%</span>{% endif %}
+                </span>
+                {% endif %}
+            </td>
+            <td style="font-variant-numeric:tabular-nums;">${{ "%.2f"|format(row.kristy_actual) }}</td>
+            <td style="font-variant-numeric:tabular-nums;color:var(--text-muted);">
+                {% if row.kristy_budget > 0 %}${{ "%.2f"|format(row.kristy_budget) }}{% else %}—{% endif %}
+            </td>
+            <td>
+                {% if row.kristy_status == "none" %}
+                <span class="status-icon none">—</span>
+                {% elif row.kristy_status == "green" %}
+                <span class="status-icon green">
+                    <span aria-label="OK" title="OK">&#10003;</span>
+                    {% if row.kristy_pct is not none %}<span class="pct-text">{{ "%.0f"|format(row.kristy_pct) }}%</span>{% endif %}
+                </span>
+                {% elif row.kristy_status == "amber" %}
+                <span class="status-icon amber">
+                    <span aria-label="Warning" title="Warning">&#9651;</span>
+                    {% if row.kristy_pct is not none %}<span class="pct-text">{{ "%.0f"|format(row.kristy_pct) }}%</span>{% endif %}
+                </span>
+                {% else %}
+                <span class="status-icon red">
+                    <span aria-label="Over budget" title="Over budget">&#10007;</span>
+                    {% if row.kristy_pct is not none %}<span class="pct-text">{{ "%.0f"|format(row.kristy_pct) }}%</span>{% endif %}
+                </span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{# ---- Month-over-Month ---- #}
+<div class="section-heading">Month-over-Month (vs. {{ "%04d-%02d"|format(prev_year, prev_month) }})</div>
+
+<table class="mom-table">
+    <thead>
+        <tr>
+            <th style="width:200px;">Category</th>
+            <th>{{ "%04d-%02d"|format(period_year, period_month) }}</th>
+            <th>{{ "%04d-%02d"|format(prev_year, prev_month) }}</th>
+            <th>Change</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in mom_rows %}
+        <tr>
+            <td>
+                <a href="/category/{{ row.category.slug }}" class="env-cat-link">{{ row.category.name }}</a>
+            </td>
+            <td>${{ "%.2f"|format(row.this_month) }}</td>
+            <td style="color:var(--text-muted);">${{ "%.2f"|format(row.last_month) }}</td>
+            <td>
+                {% if row.change > 0 %}
+                <span class="change-up">+${{ "%.2f"|format(row.change) }}
+                    {% if row.change_pct is not none %}<span style="font-size:11px;">(+{{ "%.0f"|format(row.change_pct) }}%)</span>{% endif %}
+                </span>
+                {% elif row.change < 0 %}
+                <span class="change-down">-${{ "%.2f"|format(row.change * -1) }}
+                    {% if row.change_pct is not none %}<span style="font-size:11px;">({{ "%.0f"|format(row.change_pct) }}%)</span>{% endif %}
+                </span>
+                {% else %}
+                <span class="change-zero">—</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{# ---- Classifier Performance ---- #}
+<div class="section-heading">Classifier Performance</div>
+
+<div class="perf-grid">
+    <div class="perf-card">
+        <div class="perf-card-label">Review Queue</div>
+        <div class="perf-card-value">{{ review_queue_count }}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">items pending for {{ "%04d-%02d"|format(period_year, period_month) }}</div>
+    </div>
+    <div class="perf-card">
+        <div class="perf-card-label">Total Corrections</div>
+        <div class="perf-card-value">{{ corrections_count }}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">all-time corrections saved</div>
+    </div>
+    <div class="perf-card">
+        <div class="perf-card-label">Transactions</div>
+        <div class="perf-card-value">{{ txns_count }}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">in {{ "%04d-%02d"|format(period_year, period_month) }}</div>
+    </div>
+</div>
+
+<div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--text-secondary);">
+    Confidence Distribution — {{ "%04d-%02d"|format(period_year, period_month) }}
+</div>
+{% for bin in confidence_histogram %}
+<div class="histogram-row">
+    <span class="histogram-label">{{ bin.label }}</span>
+    <div class="histogram-bar-track">
+        <div class="histogram-bar-fill"
+             style="width: {{ (bin.count / histogram_max * 100)|round }}%"></div>
+    </div>
+    <span class="histogram-count">{{ bin.count }}</span>
+</div>
+{% endfor %}
+
+{% endif %}
 {% endblock %}
